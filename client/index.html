@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en-IN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Intuitive · Pantry</title>
+    <link rel="icon" href="/brand/Intuitive%20Favicon%20Primary.svg" />
+    <script>
+      (function () {
+        var choice = localStorage.getItem("aim-theme") || "light";
+        var mode = choice;
+        if (choice === "system") {
+          mode = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.dataset.theme = mode;
+        document.documentElement.dataset.themeChoice = choice;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
