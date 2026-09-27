@@ -2,3 +2,9 @@ node_modules
 client/dist
 server/data
 .env
+.env.*
+!.env.example
+!.env.production.example
+release/
+playwright-report/
+test-results/

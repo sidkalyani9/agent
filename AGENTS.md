@@ -6,11 +6,9 @@ Keep this file under 32kb. Put extra durable notes in a sibling markdown file an
 
 ## Which folder
 
-Work only in `C:\Users\SiddharthKalyani(Dat\Projects\Acocunts Agent`.
+Work in this repository's root, using the workspace path and shell supplied by the current environment. Older project notes refer to a Windows folder named `Acocunts Agent`; do not assume that absolute path exists on another machine or rename the project to match it.
 
-The folder name is spelled Acocunts. That spelling is the real deliverable. Do not rename it.
-
-`Projects\Acocunts Agent - MVP` is the frozen local demo. Do not edit it, do not start it, and do not copy new work back into it. Both apps use ports 5173 and 8787, so only one may run.
+Any sibling `Acocunts Agent - MVP` is the frozen local demo. Do not edit it, start it, or copy new work back into it. Development uses ports 5173 and 8787, so only one app may use those ports.
 
 ## What this product is
 
@@ -20,17 +18,19 @@ Client: React and Vite, `client/`, http://127.0.0.1:5173/
 
 API: Express, `server/index.js`, http://127.0.0.1:8787/
 
-Data: SQLite at `server/data/pantry.sqlite` via `node:sqlite` `DatabaseSync`. Tests pass `PANTRY_DB`.
+Data: local development uses SQLite at `server/data/pantry.sqlite`. Production uses PostgreSQL through `DATABASE_URL` and Azure Blob for receipts. `server/database.js` exposes asynchronous operations and connection/transaction scopes; await service calls. Passing an explicit database filename always selects SQLite, keeping tests off the production database.
 
-Start from this folder with `npm run dev`. `npm start` is the API only. `npm run build` builds the client.
+Use Node.js 24 LTS. Start from this folder with `npm run dev`. `npm start` runs the API and serves `client/dist` when built. `npm run build` builds the client.
 
-Shell on this machine is PowerShell. Do not use `&&`. Chain with `;`.
+Use commands appropriate to the environment's actual shell. Do not infer PowerShell from old Windows paths.
 
 ## Documents
 
 `documents/Accounts_and_Inventory_Management_Agent_Scope_and_BRD.pdf` is the client scope and business requirements (cover: Version 1.0, draft for review, 24 September 2026, Confidential). Do not edit, rewrite, or replace that PDF unless the user asks. Scope text stays undated in new writing; calendar dates belong in a schedule, not in the scope.
 
-Phase 1 architecture, plain text, stays at `C:\Users\SiddharthKalyani(Dat\Downloads\Accounts_and_Inventory_Management_Agent_Phase_1_Architecture_Requirement.txt`. The project schedule stays at `Downloads\Accounts_and_Inventory_Management_Agent_Project_Schedule.docx`.
+Older notes refer to a Phase 1 architecture text and project schedule in the author's Windows Downloads folder. Those are external documents, not guaranteed to exist in this checkout.
+
+[Production readiness](documents/PRODUCTION_READINESS.md) records verified findings, approved exclusions and outstanding release gates. [Azure deployment](documents/AZURE_DEPLOYMENT.md) covers the approved App Service + PostgreSQL design, migration, secrets and recovery. Read the relevant document before changing production behavior or deployment guidance. Do not call Azure integration verified solely because local tests pass.
 
 Phase names use a colon. Phase 1: Pantry expense management. Phase 2: One dashboard. Phase 3: Campus drives.
 
@@ -40,7 +40,7 @@ Where this repo and that architecture text disagree, keep the behavior in this f
 
 - Admin sees every office, including All offices, and cannot add offices, assign roles, or change pantry rows.
 - A confirmed chat can soft-delete one product, one purchase, or one shelf count.
-- Hide and restore controls are not on screen. The API routes still exist.
+- Hide and restore controls are not on screen, explicitly excluded by the owner. The authorized API routes still exist. Product editing and monthly receipt retrieval are on screen.
 
 ## Theme, binding on every UI change
 
@@ -70,7 +70,7 @@ Logos and marks, `client/public/brand/`:
 - Favicon: `/brand/Intuitive Favicon Primary.svg`.
 - Do not redraw the logo, recolor it, or substitute a wordmark.
 
-Theme choice is `localStorage` key `aim-theme`: `light`, `dark`, or `system`. Default is light. `client/index.html` applies it before paint. `documentElement.dataset.theme` is `light` or `dark`. `dataset.themeChoice` keeps the user's choice. System follows `prefers-color-scheme`.
+Theme choice is `localStorage` key `aim-theme`: `light`, `dark`, or `system`. Default is light. `client/index.html` loads the external `client/public/theme.js` before paint so it works under production CSP. `documentElement.dataset.theme` is `light` or `dark`. `dataset.themeChoice` keeps the user's choice. System follows `prefers-color-scheme`.
 
 Shape and chrome:
 
@@ -97,11 +97,15 @@ Two ways in, same allowlist:
 - Email and password on the sign-in page.
 - Microsoft, via the button. It works only after `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, and `ENTRA_CLIENT_SECRET` are set. Redirect URI is `http://127.0.0.1:5173/api/auth/callback`. Do not print those values. Do not remove the Microsoft button.
 
+Production uses the exact HTTPS origin/callback instead, requires the member `acct: 0` optional ID-token claim and the seed administrator's Entra user Object ID. Keep both login methods. The owner explicitly chose no MFA for local password login; do not describe Microsoft MFA as protecting that route.
+
 Invite flow, Super Admin only, Access screen:
 
 - Enter an `@intuitive.AI` email. The API returns a one-time password once. The Super Admin sends it by hand.
 - That password is stored only as a scrypt hash. The person signs in with it and lands on the set-password page with the email filled in. They confirm a new password.
 - Someone who already chose a password is not issued another invite over the top.
+- An invite expires after seven days. Reissuing one revokes earlier setup tickets and sessions. Disabling a person revokes all app sessions/tickets; re-enabling must not revive them.
+- Local password change and Super Admin password reset are explicitly deferred to future work by the owner. Do not add a reset workflow without a new request. Microsoft login remains the alternative for a forgotten local password; compromised local accounts must remain disabled until safely recovered.
 
 Chosen passwords: at least 12 characters, at most 128, one uppercase, one lowercase, one number, no leading or trailing space, not a common password, and not containing the mailbox name. The new password must differ from the invite password. Five wrong attempts lock the account for 15 minutes.
 
@@ -121,11 +125,12 @@ One office shows a label. More than one office shows one searchable dropdown, no
 Sessions:
 
 - Access JWT, 15 minutes, HttpOnly cookie `aim_access`.
-- Refresh token, 30-day sliding window, 90-day absolute cap, HttpOnly cookie `aim_refresh` on `/api/auth`. Each refresh rotates it. Reuse of an old refresh token revokes that session family.
-- CSRF token comes from `GET /api/me` and is sent as `X-CSRF-Token` on writes. The client retries once through `POST /api/auth/refresh` on a 401.
+- Refresh token, 90-day sliding inactivity window, 180-day absolute cap, HttpOnly cookie `aim_refresh` on `/api/auth`. Each refresh rotates it and the cookie lifetime is capped by absolute expiry. Reuse of an old refresh token revokes that session family.
+- CSRF token comes from `GET /api/me` and is sent as `X-CSRF-Token` on writes; it stays stable within a session family. The client retries once on a 401 or explicit CSRF mismatch. Refresh uses Web Locks across tabs and rechecks the access cookie after acquiring the lock. Transient network/server errors must not clear valid cookies or pretend logout succeeded.
 - Do not store the session in `sessionStorage` or `localStorage`.
 - Cookies are `SameSite=Lax`. `Secure` is on when `APP_ORIGIN` is https.
 - Password hashes use scrypt N=32768, r=8, p=1. A stored hash with different parameters is rejected.
+- Keep production `SESSION_SECRET` stable across deployments. App offboarding must disable the person in the app, not only in Microsoft; these sessions are app-owned.
 
 ## Pantry rules that tests already lock
 
@@ -145,13 +150,14 @@ Calculations live in `server/calc.js`. Do not reimplement them in the client.
 - Spend is packs times price per pack on purchases that are not soft-deleted. Amounts are INR.
 - Nothing in pantry stock is hard-deleted. Hide, withdraw, and remove set `deleted_at` and `deleted_by`.
 - `created_by` and `created_at` stay as first written.
-- A failed receipt upload still keeps the purchase. Receipts are PDF, JPEG, or PNG, checked from the file bytes, at most 10MB, stored under `server/data/receipts`, and downloaded only by someone who can view that office, as an attachment.
+- A failed receipt upload still keeps the purchase. Receipts are PDF, JPEG, or PNG, checked from the file bytes, at most 10MB, stored locally under `PANTRY_DATA_DIR/receipts` (default `server/data`) or in private Azure Blob Storage. Immutable versioned object names preserve older receipts for backup recovery. Downloads require office access and are attachments. Type checks are not a malware scanner.
 - Chat stock questions are answered by `factualReply` in `server/chat.js` from live pantry data, before any model call.
 - The model is TokenRouter at `https://api.tokenrouter.com/v1/chat/completions`, model `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`, key in `OPENROUTER_API_KEY` or `TOKENROUTER_API_KEY`. Do not print the key. Do not set `NODE_TLS_REJECT_UNAUTHORIZED`. This app deletes that variable for its own processes.
 - Replies stream over `POST /api/chat` when `stream` is true. SSE events are `thread`, `delta`, `replace`, `done`, and `error`. The JSON path remains.
 - Follow-ups stay on `threadId`. Errors still return `threadId`.
 - One product, one purchase, or one shelf count can be deleted from chat only after the assistant says the data will be deleted and the person says yes. Accounts and Admin are refused. Hide, restore, wipe, rename, and receipt-only delete stay refused. Weather and other non-pantry topics are refused.
 - Propose tools prepare a card. Nothing is saved until the person confirms or says yes.
+- A confirmation belongs to its owner and chat thread, and expires after 30 minutes. A yes in another conversation must not apply it. Recheck live roles inside service operations, including after model calls.
 - Opening the pantry page does not call the model.
 
 ## Security habits
@@ -162,22 +168,27 @@ Calculations live in `server/calc.js`. Do not reimplement them in the client.
 - Rate limits exist on login, refresh, and the API. Keep them.
 - Bind the API to `127.0.0.1` unless `WEBSITE_SITE_NAME` or `PANTRY_HOST` says otherwise.
 - `.env`, `server/data/`, and `node_modules/` stay untracked. `server/data/pantry.sqlite.mvp-backup` is the old demo database. Do not delete it and do not point the app at it.
+- Production startup requires HTTPS, PostgreSQL, Blob configuration, strong session secret and Microsoft credentials; fixtures are forbidden. Never weaken those checks to make deployment work.
+- Preserve transaction scopes and parameterized values when changing SQLite/PostgreSQL queries. App Service starts with one process/instance; rate limits are per-process. Do not scale out without revisiting abuse limits and load-testing the coarse database lock.
 
 ## Tests and commits
 
-`npm test` runs, in this folder:
+`npm test` runs every `server/*.test.js`, including:
 
 - `server/calc.test.js`
 - `server/identity.test.js`
 - `server/password.test.js`
 - `server/service.test.js`
 - `server/chat.scope.test.js`
+- `server/security.test.js`
+- `server/http.test.js`
+- `server/postgres.test.js`
 
 Before any commit, run the whole suite. All of it must pass. Do not commit a red suite, a skipped file, or a focused `only` test.
 
 When you change calculation, stock, spend, auth, invites, roles, chat scope, delete confirmation, or an API status code, add or update a test that fails if the old bug returns. Then run the whole suite, not only the new file.
 
-Tests use temporary sqlite files. They must not open `server/data/pantry.sqlite`.
+Tests use temporary SQLite files or isolated PGlite PostgreSQL engines. They must not open `server/data/pantry.sqlite` or use real Azure credentials. PostgreSQL tests prove engine behavior, not Azure networking/TLS. Run `npm run build` and `npm run test:browser` for client changes; the latter starts a temporary app on 5173 and needs Playwright Chromium (or `PANTRY_BROWSER_CHANNEL=chrome`).
 
 A UI change is not done when the suite is green alone. Also use the screen, as the theme section says.
 
@@ -186,7 +197,9 @@ Do not commit secrets, the live database, or a generated invite password. Write 
 ## Layout of the code
 
 - `server/calc.js` computes. `server/service.js` stores and authorizes. `server/chat.js` answers. `server/passwords.js` hashes passwords and signs tokens. `server/identity.js` checks the Microsoft identity. `server/entra.js` runs the Microsoft login. `server/index.js` is the HTTP surface. `server/http.js` and `server/secret.js` are headers, cookies, and encryption.
+- `server/config.js` validates production settings; `database.js` provides SQLite/PostgreSQL scopes and transactions; `receipts.js` provides local/managed-identity Blob I/O. `migration.js` and `scripts/migrate-to-postgres.mjs` perform an explicit, source-preserving migration to an empty PostgreSQL destination. Never run execution against live data without the user's cutover authorization.
 - `client/src/screens/Dashboard.jsx` is the shell. `SignIn.jsx` is sign-in and set-password. `OfficeBar.jsx` switches offices and adds an office. `AccessPanel.jsx` invites and assigns roles. `RecordPanel.jsx` records. `PantryCharts.jsx` draws charts. `ChatPanel.jsx` is the assistant.
+- `ProductEditor.jsx` edits name/reorder/warning in Stock. `Purchases.jsx` lists monthly purchases and retrieves receipts through authenticated API requests.
 - Record kinds are Purchase, Count, Product, and Settings for a Super Admin. There is no Office kind on that form. Offices are added from the office bar. All offices cannot record. The bar must name one office first.
 
 ## Do not

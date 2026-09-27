@@ -97,11 +97,7 @@ export function App() {
     <Dashboard
       theme={theme}
       onSignOut={async () => {
-        try {
-          await api("/api/auth/logout", { method: "POST", body: {} });
-        } catch {
-          /* the session is already gone */
-        }
+        await api("/api/auth/logout", { method: "POST", body: {} });
         setCsrf("");
         setSession(false);
       }}

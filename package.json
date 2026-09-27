@@ -2,18 +2,28 @@
   "name": "intuitive-pantry",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "start": "node server/index.js",
     "build": "vite build",
-    "test": "node --test server/calc.test.js server/identity.test.js server/password.test.js server/service.test.js server/chat.scope.test.js"
+    "test": "node --test server/*.test.js",
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "migrate:postgres": "node scripts/migrate-to-postgres.mjs"
   },
   "dependencies": {
+    "@azure/identity": "^4.13.3",
+    "@azure/storage-blob": "^12.34.0",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
-    "openid-client": "^6.8.8"
+    "openid-client": "^6.8.8",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@playwright/test": "^1.63.0",
     "@vitejs/plugin-react": "^5.0.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

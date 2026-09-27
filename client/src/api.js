@@ -22,27 +22,41 @@ function canRefresh(path) {
 
 export function refreshSession() {
   if (!refreshing) {
-    refreshing = fetch("/api/auth/refresh", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    })
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || "Sign in again.");
+    const refresh = async () => {
+      // Cookies are shared between tabs. Re-check after obtaining the lock so
+      // only one tab rotates a refresh token; replay detection stays strict.
+      const current = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+      if (current.ok) {
+        const data = await current.json();
         setCsrf(data.csrfToken);
         return data;
-      })
-      .finally(() => {
-        refreshing = null;
+      }
+      if (current.status !== 401) throw new Error("The pantry is unavailable. Try again.");
+      const response = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
       });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(data.error || "Sign in again.");
+        error.status = response.status;
+        throw error;
+      }
+      setCsrf(data.csrfToken);
+      return data;
+    };
+    const locks = globalThis.navigator?.locks;
+    refreshing = (locks ? locks.request("aim-session-refresh", refresh) : refresh()).finally(() => {
+      refreshing = null;
+    });
   }
   return refreshing;
 }
 
-export async function api(path, { method = "GET", body, retried = false } = {}) {
-  const headers = authHeaders(method);
+export async function api(path, { method = "GET", body, retried = false, headers: extra = {} } = {}) {
+  const headers = authHeaders(method, extra);
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const response = await fetch(path, {
     method,
@@ -51,18 +65,17 @@ export async function api(path, { method = "GET", body, retried = false } = {}) 
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const type = response.headers.get("content-type") || "";
-  if (type.includes("text/csv")) {
-    if (!response.ok) throw new Error("The month could not be downloaded.");
+  if (response.ok && (type.includes("text/csv") || response.headers.get("content-disposition")?.startsWith("attachment"))) {
     return response.blob();
   }
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401 && !retried && canRefresh(path)) {
+  if ((response.status === 401 || (response.status === 403 && data.code === "csrf")) && !retried && canRefresh(path)) {
     try {
       await refreshSession();
-      return api(path, { method, body, retried: true });
-    } catch {
-      setCsrf("");
-      onUnauthorized();
+      return api(path, { method, body, retried: true, headers: extra });
+    } catch (error) {
+      if (error.status === 401) { setCsrf(""); onUnauthorized(); }
+      throw error;
     }
   } else if (response.status === 401) {
     setCsrf("");
@@ -87,13 +100,13 @@ export async function streamChat(body, onEvent, retried = false) {
   const type = response.headers.get("content-type") || "";
   if (!type.includes("text/event-stream")) {
     const data = await response.json().catch(() => ({}));
-    if (response.status === 401 && !retried) {
+    if ((response.status === 401 || (response.status === 403 && data.code === "csrf")) && !retried) {
       try {
         await refreshSession();
         return streamChat(body, onEvent, true);
-      } catch {
-        setCsrf("");
-        onUnauthorized();
+      } catch (error) {
+        if (error.status === 401) { setCsrf(""); onUnauthorized(); }
+        throw error;
       }
     } else if (response.status === 401) {
       setCsrf("");

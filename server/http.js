@@ -1,37 +1,43 @@
 import crypto from "node:crypto";
+import { isIP } from "node:net";
 
 const buckets = new Map();
 
 export function clientIp(req) {
-  if (process.env.PANTRY_TRUST_PROXY === "1") {
-    const first = String(req.get("x-forwarded-for") || "").split(",")[0].trim();
-    if (first) return first.slice(0, 64);
+  // App Service overwrites Client-IP at its front end. Never trust a caller's
+  // X-Forwarded-For or X-Client-IP as an identity for rate limiting.
+  if (process.env.WEBSITE_SITE_NAME) {
+    const raw = String(req.get("client-ip") || "").trim();
+    const candidate = /^\[[^\]]+\]:\d+$/.test(raw) ? raw.slice(1, raw.indexOf("]")) : /^\d+\.\d+\.\d+\.\d+:\d+$/.test(raw) ? raw.split(":")[0] : raw;
+    if (isIP(candidate)) return candidate;
   }
-  return req.socket?.remoteAddress || "unknown";
+  // Express resolves only proxies explicitly trusted by the application.
+  return req.ip || req.socket?.remoteAddress || "unknown";
 }
 
-export function rateLimit({ name, limit, windowMs }) {
+export function rateLimit({ name, limit, windowMs, key = clientIp }) {
   return (req, res, next) => {
     const now = Date.now();
-    const key = `${name}:${clientIp(req)}`;
-    const fresh = (buckets.get(key) || []).filter((at) => now - at < windowMs);
+    const bucketKey = `${name}:${key(req)}`;
+    const fresh = (buckets.get(bucketKey)?.times || []).filter((at) => now - at < windowMs);
     if (fresh.length >= limit) {
       res.setHeader("Retry-After", String(Math.ceil(windowMs / 1000)));
       return res.status(429).json({ error: "Too many requests. Wait a minute and try again." });
     }
     fresh.push(now);
-    buckets.set(key, fresh);
+    buckets.set(bucketKey, { times: fresh, expires: now + windowMs });
     if (buckets.size > 5000) {
-      for (const [bucketKey, times] of buckets) {
-        if (!times.some((at) => now - at < windowMs)) buckets.delete(bucketKey);
+      for (const [bucketKey, bucket] of buckets) {
+        if (bucket.expires <= now) buckets.delete(bucketKey);
       }
+      if (buckets.size > 10000) buckets.delete(buckets.keys().next().value);
     }
     return next();
   };
 }
 
 export function readCookies(req) {
-  const out = {};
+  const out = Object.create(null);
   for (const part of String(req.headers.cookie || "").split(";")) {
     const eq = part.indexOf("=");
     if (eq < 1) continue;
@@ -72,8 +78,9 @@ export function clearCookie(res, name, path = "/") {
 
 export function allowedOrigin(req) {
   const origin = req.get("origin");
-  if (!origin) return true;
-  const allowed = new Set(["http://127.0.0.1:5173", "http://localhost:5173"]);
+  if (req.get("sec-fetch-site") === "cross-site") return false;
+  if (!origin) return process.env.NODE_ENV !== "production";
+  const allowed = new Set(process.env.NODE_ENV === "production" ? [] : ["http://127.0.0.1:5173", "http://localhost:5173"]);
   const configured = String(process.env.APP_ORIGIN || "").replace(/\/$/, "");
   if (configured) allowed.add(configured);
   return allowed.has(origin.replace(/\/$/, ""));
@@ -88,6 +95,8 @@ export function csrfOk(header, expected) {
 }
 
 export function securityHeaders(_req, res, next) {
+  if (cookiesAreSecure()) res.setHeader("Strict-Transport-Security", "max-age=31536000");
+  res.setHeader("Content-Security-Policy", htmlCsp());
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");

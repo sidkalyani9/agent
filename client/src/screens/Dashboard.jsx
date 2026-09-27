@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, indiaDate, monthLabel, rupee, setCsrf, statusLabel } from "../api.js";
 import { AccessPanel } from "../components/AccessPanel.jsx";
 import { ChatDock } from "../components/ChatPanel.jsx";
 import { DateRange, OfficeCompare, PantryCharts } from "../components/PantryCharts.jsx";
 import { OfficeBar } from "../components/OfficeBar.jsx";
 import { RecordPanel } from "../components/RecordPanel.jsx";
+import { ProductEditor } from "../components/ProductEditor.jsx";
+import { Purchases } from "../components/Purchases.jsx";
 import {
   IconAccess,
   IconActivity,
@@ -44,13 +46,18 @@ export function Dashboard({ theme, onSignOut }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const officeRequest = useRef(0);
+  const purchaseRequest = useRef(null);
 
   async function loadOffice(nextOffice, nextMonth, person = me) {
     if (!nextOffice) return;
+    const request = ++officeRequest.current;
     const pantryData = await api(`/api/offices/${nextOffice}/pantry?month=${encodeURIComponent(nextMonth)}`);
+    if (request !== officeRequest.current) return;
     setPantry(pantryData);
     if (person?.seesEveryOffice) {
-      setSummary(await api(`/api/pantry/summary?month=${encodeURIComponent(nextMonth)}`));
+      const summaryData = await api(`/api/pantry/summary?month=${encodeURIComponent(nextMonth)}`);
+      if (request === officeRequest.current) setSummary(summaryData);
     }
   }
 
@@ -150,8 +157,11 @@ export function Dashboard({ theme, onSignOut }) {
       } else if (form.kind === "product") {
         await api(`/api/offices/${officeId}/products`, { method: "POST", body: { name: form.name } });
       } else if (form.kind === "purchase") {
+        const fingerprint = JSON.stringify({ officeId, form, receipt });
+        if (purchaseRequest.current?.fingerprint !== fingerprint) purchaseRequest.current = { fingerprint, key: crypto.randomUUID() };
         const saved = await api(`/api/offices/${officeId}/purchases`, {
           method: "POST",
+          headers: { "Idempotency-Key": purchaseRequest.current.key },
           body: {
             productId: form.productId,
             date: form.date,
@@ -160,6 +170,7 @@ export function Dashboard({ theme, onSignOut }) {
             receipt,
           },
         });
+        purchaseRequest.current = null;
         if (saved.receiptError) setError(saved.receiptError);
       } else if (form.kind === "count") {
         await api(`/api/offices/${officeId}/counts`, {
@@ -172,11 +183,17 @@ export function Dashboard({ theme, onSignOut }) {
           body: { weekendWeight: Number(form.price), lookbackMonths: Number(form.packs) },
         });
       }
-      const officeData = await api("/api/offices");
-      setOffices(officeData.offices);
-      const nextOffice = officeId || officeData.offices[0]?.id;
-      if (!officeId && nextOffice) setOfficeId(nextOffice);
-      await loadOffice(nextOffice, month, me);
+      try {
+        const officeData = await api("/api/offices");
+        setOffices(officeData.offices);
+        const nextOffice = officeId || officeData.offices[0]?.id;
+        if (!officeId && nextOffice) setOfficeId(nextOffice);
+        await loadOffice(nextOffice, month, me);
+      } catch {
+        // The write was acknowledged. Clear the form even if a subsequent
+        // read fails so retrying the display does not record another purchase.
+        setError(previous => [previous, "Saved, but the screen could not refresh. Reload to see the updated pantry."].filter(Boolean).join(" "));
+      }
       return true;
     } catch (err) {
       setError(err.message);
@@ -199,6 +216,7 @@ export function Dashboard({ theme, onSignOut }) {
   function chooseOffice(id) {
     setAllOffices(false);
     setOfficeId(id);
+    setPantry(null);
     loadOffice(id, month, me).catch((err) => setError(err.message));
   }
 
@@ -237,7 +255,7 @@ export function Dashboard({ theme, onSignOut }) {
             <button type="button" aria-label="Dark" aria-pressed={theme.choice === "dark"} onClick={() => theme.setChoice("dark")}><IconMoon /></button>
             <button type="button" aria-label="System" aria-pressed={theme.choice === "system"} onClick={() => theme.setChoice("system")}><IconSystem /></button>
           </div>
-          <button className="nav-item logout" type="button" onClick={onSignOut}>
+          <button className="nav-item logout" type="button" onClick={() => onSignOut().catch(() => setError("Log out could not be completed. Check your connection and try again."))}>
             <IconLogout /> Log out
           </button>
         </div>
@@ -320,7 +338,7 @@ export function Dashboard({ theme, onSignOut }) {
           allOffices ? (
             <section className="card"><h2>Choose an office</h2><p className="lede">Record applies to one office. Pick it in the bar.</p></section>
           ) : (
-            <RecordPanel pantry={pantry} superAdmin={me?.superAdmin} officeName={pantry?.officeName} busy={busy} onSubmit={submit} />
+            <RecordPanel key={officeId} pantry={pantry} superAdmin={me?.superAdmin} officeName={pantry?.officeName} busy={busy || !pantry} onSubmit={submit} />
           )
         ) : null}
 
@@ -371,10 +389,12 @@ export function Dashboard({ theme, onSignOut }) {
                     </p>
                     <span className={`pill ${product.status}`}>{statusLabel(product.status)}</span>
                     {product.message ? <p className="note">{product.message}</p> : null}
+                    {pantry.canWrite ? <ProductEditor key={`${product.productId}-${product.name}-${product.reorderLevel}-${product.warningEffectiveDays}`} product={product} onSaved={refresh} /> : null}
                   </article>
                 )) : <p className="note">{stockQuery.trim() ? "No product matches that search." : "No products on this pantry."}</p>}
               </div>
             )}
+            {!allOffices && pantry ? <Purchases key={`${officeId}-${month}`} officeId={officeId} month={month} revision={pantry} /> : null}
           </section>
         ) : null}
 

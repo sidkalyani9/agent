@@ -53,7 +53,9 @@ export function passwordProblems(plain, email) {
   }
   const local = String(email || "").split("@")[0].toLowerCase();
   const folded = password.toLowerCase();
-  if (COMMON.has(folded) || (local.length >= 3 && folded.includes(local))) {
+  const normalized = folded.replace(/[^a-z0-9]/g, "");
+  const word = folded.replace(/[^a-z]/g, "");
+  if (COMMON.has(folded) || COMMON.has(normalized) || COMMON.has(word) || (local.length >= 3 && folded.includes(local))) {
     problems.push("Choose a password that is harder to guess.");
   }
   return problems;
@@ -98,7 +100,7 @@ function readJwt(token, typ) {
   } catch {
     return null;
   }
-  if (header.alg !== "HS256" || header.typ !== "JWT") return null;
+  if (!header || typeof header !== "object" || header.alg !== "HS256" || header.typ !== "JWT") return null;
   const expected = crypto.createHmac("sha256", secret()).update(`${headerPart}.${bodyPart}`).digest("base64url");
   const left = Buffer.from(sig);
   const right = Buffer.from(expected);
@@ -110,7 +112,7 @@ function readJwt(token, typ) {
     return null;
   }
   const nowSec = Math.floor(Date.now() / 1000);
-  if (claims.iss !== ISSUER || claims.aud !== ISSUER || claims.typ !== typ) return null;
+  if (!claims || typeof claims !== "object" || claims.iss !== ISSUER || claims.aud !== ISSUER || claims.typ !== typ) return null;
   if (typeof claims.exp !== "number" || claims.exp < nowSec - 30) return null;
   if (typeof claims.iat === "number" && claims.iat > nowSec + 30) return null;
   return claims;
