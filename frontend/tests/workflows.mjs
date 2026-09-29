@@ -23,12 +23,7 @@ export async function extendedWorkflows({ page, browser, app }) {
   await page.locator('.record-form').getByLabel('Name', { exact: true }).fill('Browser oats');
   await nav('Save');
   await expect(page.locator('.record-form').getByLabel('Name', { exact: true })).toHaveValue('');
-  await nav('Count');
-  await page.locator('.record-form select').selectOption({ label: 'Browser oats' });
-  await page.getByLabel('Packs', { exact: true }).fill('8');
-  await nav('Save');
-  await expect(page.getByLabel('Packs', { exact: true })).toHaveValue('');
-  await nav('Settings');
+  await page.locator('.side').getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByLabel('Lookback months').fill('4');
   await page.getByLabel('Weekend weight').fill('0.3');
   await nav('Save');

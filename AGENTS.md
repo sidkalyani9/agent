@@ -194,7 +194,7 @@ Do not commit secrets, the live database, or a generated invite password. Write 
 - Root scripts are convenience/build tooling. `scripts/package_release.py` stages only Python runtime, requirements, startup and frontend assets; production does not need Node. CI tests Python 3.12, PostgreSQL and Node 24, then uploads a release artifact without deploying it.
 - `frontend/src/screens/Dashboard.jsx` is the shell. `SignIn.jsx` is sign-in and set-password. `OfficeBar.jsx` switches offices from the sidebar. `OfficesPanel.jsx` adds, renames, and assigns an Office Manager. There is no office delete. `AccessPanel.jsx` invites and assigns roles. `SettingsPanel.jsx` edits weekend weight and lookback. `RecordPanel.jsx` records. `PantryCharts.jsx` draws charts. `ChatPanel.jsx` is the assistant.
 - `ProductEditor.jsx` edits name/reorder/warning in Stock. `Purchases.jsx` lists monthly purchases, previews and downloads receipts, corrects a purchase, and removes one. Hide and restore stay off screen.
-- Record kinds are Purchase, Count, and Product. Settings is the Super Admin screen. All offices cannot record. Pick one office above the name.
+- Record kinds are Receipt, Purchase, and Product. Settings is the Super Admin screen and also a Record tab for a Super Admin. All offices cannot record. Pick one office above the name. Receipt reading is a draft for the person who uploaded it. Pages are rendered in memory with the pinned PyMuPDF wheel, the same call on Windows and Linux, with no separate renderer and no temp files. A line the model cannot match stays on that draft until the person chooses a product or discards it. Purchases are saved only when the person approves them.
 
 ## Do not
 

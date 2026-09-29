@@ -28,6 +28,7 @@ try {
   await expect(page.getByRole("heading", { name: "Coffee beans", exact: true })).toBeVisible();
   assert.equal(await page.getByRole("button", { name: /hide|restore/i }).count(), 0);
   await page.getByRole("button", { name: "Record", exact: true }).click();
+  await page.getByRole("button", { name: "Purchase", exact: true }).click();
   await page.locator(".record-form select").selectOption({ label: "Coffee beans" });
   await page.getByLabel("Packs", { exact: true }).fill("3");
   await page.getByLabel("Price per pack (INR)").fill("25.50");
@@ -46,6 +47,106 @@ try {
   const downloaded = page.waitForEvent("download");
   await row.getByRole("button", { name: "Download receipt" }).click();
   assert.equal((await downloaded).suggestedFilename(), "browser-receipt.pdf");
+  await page.getByRole("button", { name: "Record", exact: true }).click();
+  await page.getByRole("button", { name: "Receipt", exact: true }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "receipt.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"),
+  });
+  await page.getByRole("button", { name: "Read receipt", exact: true }).click();
+  await expect(page.getByText("The assistant is not switched on yet. Recording on the pantry screen still works.")).toBeVisible({ timeout: 10000 });
+  const catalog = await page.evaluate(async () => {
+    const offices = await fetch("/api/offices", { credentials: "same-origin" }).then((response) => response.json());
+    const office = offices.offices.find((item) => item.name === "Ahmedabad");
+    const pantry = await fetch(`/api/offices/${office.id}/pantry`, { credentials: "same-origin" }).then((response) => response.json());
+    return {
+      today: pantry.today,
+      names: Object.fromEntries(pantry.products.filter((product) => !product.deletedAt).map((product) => [product.productId, product.name])),
+    };
+  });
+  let draft = {
+    readingId: "browser-reading",
+    status: "ready",
+    error: null,
+    fileName: "receipt.png",
+    result: {
+      date: catalog.today,
+      note: null,
+      lines: [
+        { id: "0", printed: "Amul Taaza", productId: "", productName: "", packs: 2, pricePerPack: "30.00", matched: false, discarded: false },
+        { id: "1", printed: "Mystery item", productId: "", productName: "", packs: 1, pricePerPack: "10.00", matched: false, discarded: false },
+      ],
+    },
+  };
+  await page.route("**/api/offices/*/receipt-readings**", async (route) => {
+    const request = route.request();
+    const url = request.url();
+    const method = request.method();
+    if (method === "POST" && url.endsWith("/receipt-readings")) {
+      await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ readingId: draft.readingId, status: "reading" }) });
+      return;
+    }
+    if (method === "GET" && url.endsWith("/receipt-readings/open")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ reading: null }) });
+      return;
+    }
+    if (method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(draft) });
+      return;
+    }
+    if (method === "PATCH") {
+      const body = request.postDataJSON();
+      draft = {
+        ...draft,
+        status: "ready",
+        result: {
+          date: body.date,
+          note: null,
+          lines: body.lines.map((line) => ({
+            ...draft.result.lines.find((item) => item.id === line.id),
+            ...line,
+            productName: catalog.names[line.productId] || "",
+            matched: Boolean(line.productId),
+            discarded: Boolean(line.discarded),
+          })),
+        },
+      };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(draft) });
+      return;
+    }
+    if (method === "POST" && url.endsWith("/dismiss")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ dismissed: true }) });
+      return;
+    }
+    await route.continue();
+  });
+  await page.getByRole("button", { name: "Read receipt", exact: true }).click();
+  const amul = page.locator(".receipt-line", { hasText: "Amul Taaza" });
+  await expect(amul.getByText("Not one of this office's products.")).toBeVisible({ timeout: 10000 });
+  assert.equal(await page.locator(".receipt-review select").count(), 0);
+  await amul.getByRole("button", { name: "Choose a product" }).click();
+  await expect(amul.getByLabel("Search products")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(amul.getByLabel("Search products")).toHaveCount(0);
+  await amul.getByRole("button", { name: "Choose a product" }).click();
+  await amul.getByLabel("Search products").fill("zzz");
+  await expect(amul.getByText("No product matches that search.")).toBeVisible();
+  await amul.getByLabel("Search products").fill("mil");
+  await amul.getByRole("option", { name: "Milk", exact: true }).click();
+  await expect(amul.getByRole("button", { name: "Milk", exact: true })).toBeVisible();
+  await expect(amul.getByText("Not one of this office's products.")).toHaveCount(0);
+  const mystery = page.locator(".receipt-line", { hasText: "Mystery item" });
+  await mystery.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(mystery).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("button", { name: "Clear this receipt", exact: true }).click();
+  await expect(page.getByText("Drop a PDF, JPEG, or PNG, or browse")).toBeVisible();
+  await page.unroute("**/api/offices/*/receipt-readings**");
+  await page.getByRole("button", { name: "Purchase", exact: true }).click();
+  await expect(page.locator(".record-form select")).toBeVisible();
   for (const label of ["Charts", "Activity", "Access", "Stock"]) {
     await page.getByRole("button", { name: label, exact: true }).click();
     await expect(page.locator("main.page")).toBeVisible();
@@ -75,12 +176,17 @@ try {
   await mobile.screenshot({ path: path.join(os.tmpdir(), "pantry-mobile-review.png"), fullPage: true });
   assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await mobile.getByRole("button", { name: "Open menu" }).click();
+  await mobile.getByRole("button", { name: "Record", exact: true }).click();
+  await mobile.getByRole("button", { name: "Receipt", exact: true }).click();
+  await expect(mobile.getByText("The assistant is not switched on yet. Recording on the pantry screen still works.")).toBeVisible({ timeout: 10000 });
+  assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await mobile.getByRole("button", { name: "Open menu" }).click();
   await mobile.getByRole("button", { name: "Log out" }).click();
   await expect(mobile.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
   await mobile.reload();
   await expect(mobile.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
-  console.log("Browser checks passed: login, product edit, receipt download, offices, counts, settings, CSV, chat, invites, password setup, live role removal, read-only roles, shared screens, theme, two-tab refresh, persistent cookies, 390px layout, logout.");
+  console.log("Browser checks passed: login, product edit, receipt download, receipt reading, unmatched lines, offices, settings, CSV, chat, invites, password setup, live role removal, read-only roles, shared screens, theme, two-tab refresh, persistent cookies, 390px layout, logout.");
   await returning.close();
 } catch (error) {
   const page = browser?.contexts()[0]?.pages()[0];

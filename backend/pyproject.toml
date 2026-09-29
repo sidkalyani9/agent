@@ -10,7 +10,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi==0.141.1", "uvicorn==0.54.0", "httpx==0.28.1",
   "psycopg[binary,pool]==3.3.6", "cryptography==50.0.1", "PyJWT==2.15.0",
-  "python-dotenv==1.2.3", "azure-identity==1.25.3", "azure-storage-blob==12.30.3",
+  "python-dotenv==1.2.3", "pymupdf==1.26.5", "azure-identity==1.25.3", "azure-storage-blob==12.30.3",
 ]
 
 [tool.setuptools.packages.find]

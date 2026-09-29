@@ -160,4 +160,19 @@
       ON role_grant(person_id, role, ifnull(office_id, '')) WHERE deleted_at IS NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS person_sign_in_lower ON person(lower(sign_in_name));
     CREATE UNIQUE INDEX IF NOT EXISTS office_name_lower ON office(lower(name));
+    CREATE TABLE IF NOT EXISTS receipt_reading (
+      id TEXT PRIMARY KEY,
+      office_id TEXT NOT NULL,
+      blob_path TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      byte_size INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      result_json TEXT,
+      error TEXT,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS receipt_reading_office ON receipt_reading(office_id, created_at);
   

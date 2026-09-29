@@ -65,6 +65,14 @@
   ],
   [
     "GET",
+    "/api/offices/{}/receipt-readings/open"
+  ],
+  [
+    "GET",
+    "/api/offices/{}/receipt-readings/{}"
+  ],
+  [
+    "GET",
     "/api/pantry/summary"
   ],
   [
@@ -78,6 +86,10 @@
   [
     "PATCH",
     "/api/offices/{}"
+  ],
+  [
+    "PATCH",
+    "/api/offices/{}/receipt-readings/{}"
   ],
   [
     "PATCH",
@@ -150,6 +162,18 @@
   [
     "POST",
     "/api/offices/{}/purchases"
+  ],
+  [
+    "POST",
+    "/api/offices/{}/receipt-readings"
+  ],
+  [
+    "POST",
+    "/api/offices/{}/receipt-readings/{}/dismiss"
+  ],
+  [
+    "POST",
+    "/api/offices/{}/receipt-readings/{}/save"
   ],
   [
     "POST",

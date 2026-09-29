@@ -168,7 +168,7 @@ class SecurityMiddleware:
                 return await reply(limited)
             scope.setdefault("state", {})["body"] = {}
             if request.headers.get("content-type", "").split(";")[0].strip().lower() == "application/json":
-                upload = (method == "POST" and re.fullmatch(r"/api/offices/[^/]+/purchases", path)) or (method == "PUT" and re.fullmatch(r"/api/purchases/[^/]+/receipt", path))
+                upload = (method == "POST" and re.fullmatch(r"/api/offices/[^/]+/purchases", path)) or (method == "POST" and re.fullmatch(r"/api/offices/[^/]+/receipt-readings", path)) or (method == "PUT" and re.fullmatch(r"/api/purchases/[^/]+/receipt", path))
                 limit = 14 * 1024 * 1024 if upload else 64 * 1024
                 if request.headers.get("content-encoding", "identity").lower() != "identity":
                     raise ValueError("Unsupported body encoding")

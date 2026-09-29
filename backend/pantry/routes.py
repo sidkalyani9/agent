@@ -3,7 +3,7 @@ import base64
 import re
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import JSONResponse, Response
-from . import accounts as a, inventory as i, conversations as c, entra, chat
+from . import accounts as a, inventory as i, conversations as c, entra, chat, receipt_read
 from .core import HttpError
 from .http import clear_auth_cookies
 from .compat import text
@@ -170,6 +170,42 @@ async def restore_product(request: Request, product_id: str):
 async def create_purchase(request: Request, office_id: str):
     db, actor, body = context(request)
     return await i.create_purchase(db, actor, office_id, body, decode_receipt(body.get("receipt")), request.headers.get("idempotency-key"))
+
+
+@router.post("/api/offices/{office_id}/receipt-readings", status_code=202)
+async def start_receipt_reading(request: Request, office_id: str):
+    db, actor, body = context(request)
+    return await receipt_read.start(db, actor, office_id, decode_receipt(body.get("receipt")))
+
+
+@router.get("/api/offices/{office_id}/receipt-readings/open")
+async def open_receipt_reading(request: Request, office_id: str):
+    db, actor, _ = context(request)
+    return await receipt_read.open_reading(db, actor, office_id)
+
+
+@router.get("/api/offices/{office_id}/receipt-readings/{reading_id}")
+async def get_receipt_reading(request: Request, office_id: str, reading_id: str):
+    db, actor, _ = context(request)
+    return await receipt_read.get_reading(db, actor, office_id, reading_id)
+
+
+@router.patch("/api/offices/{office_id}/receipt-readings/{reading_id}")
+async def patch_receipt_reading(request: Request, office_id: str, reading_id: str):
+    db, actor, body = context(request)
+    return await receipt_read.patch_reading(db, actor, office_id, reading_id, body)
+
+
+@router.post("/api/offices/{office_id}/receipt-readings/{reading_id}/dismiss")
+async def dismiss_receipt_reading(request: Request, office_id: str, reading_id: str):
+    db, actor, _ = context(request)
+    return await receipt_read.dismiss(db, actor, office_id, reading_id)
+
+
+@router.post("/api/offices/{office_id}/receipt-readings/{reading_id}/save")
+async def save_receipt_reading(request: Request, office_id: str, reading_id: str):
+    db, actor, body = context(request)
+    return await receipt_read.save(db, actor, office_id, reading_id, body)
 
 
 @router.get("/api/offices/{office_id}/purchases")

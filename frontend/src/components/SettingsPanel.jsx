@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 
-export function SettingsPanel({ settings, onSaved, onToast }) {
+export function SettingsPanel({ settings, onSaved, onToast, embedded = false }) {
   const [weight, setWeight] = useState(String(settings?.weekendWeight ?? 0.2));
   const [lookback, setLookback] = useState(String(settings?.lookbackMonths ?? 3));
   const [error, setError] = useState("");
@@ -34,10 +34,10 @@ export function SettingsPanel({ settings, onSaved, onToast }) {
     }
   }
 
-  return (
-    <section className="card record-card">
-      <h2>Settings</h2>
-      <p className="lede">Weekend weight and lookback apply to every office. 0 closes weekends, 1 counts them as a full day.</p>
+  const body = (
+    <>
+      {embedded ? null : <h2>Settings</h2>}
+      {embedded ? null : <p className="lede">Weekend weight and lookback apply to every office. 0 closes weekends, 1 counts them as a full day.</p>}
       {error ? <p className="error" role="alert">{error}</p> : null}
       <form className="fields" onSubmit={save}>
         <label className="field">Lookback months
@@ -51,6 +51,8 @@ export function SettingsPanel({ settings, onSaved, onToast }) {
           <button className="solid" type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
         </div>
       </form>
-    </section>
+    </>
   );
+  if (embedded) return <div className="receipt-review">{body}</div>;
+  return <section className="card record-card">{body}</section>;
 }

@@ -593,10 +593,14 @@ export function Dashboard({ theme, onSignOut }) {
             <RecordPanel
               key={officeId}
               pantry={pantry}
+              officeId={officeId}
               officeName={selectedOffice?.name || pantry?.officeName}
+              superAdmin={Boolean(me?.superAdmin)}
               busy={busy}
               loading={!pantry}
               onSubmit={submit}
+              onSaved={refresh}
+              onToast={pushToast}
             />
           )
         ) : null}

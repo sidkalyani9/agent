@@ -651,7 +651,79 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   font: inherit;
 }
 .record-card { max-width: 760px; }
+.record-card .choices { justify-content: flex-start; margin-top: 16px; }
+.record-card > .note { margin-top: 12px; }
 .record-form { display: grid; gap: 16px; margin-top: 16px; }
+.receipt-review { display: grid; gap: 16px; margin-top: 16px; }
+.receipt-lines { display: grid; gap: 12px; }
+.receipt-line {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  padding: 12px;
+}
+.receipt-line.unmatched { border-left: 3px solid var(--accent); }
+.receipt-line-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.receipt-line-head strong { min-width: 0; font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.receipt-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.receipt-wait { margin: 0; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .receipt-wait { animation: receipt-pulse 1.2s ease-in-out infinite; }
+}
+@keyframes receipt-pulse { 50% { opacity: 0.45; } }
+.product-pick { position: relative; }
+.product-button {
+  width: 100%;
+  text-align: left;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 16px;
+}
+.product-button:hover, .product-button[aria-expanded="true"] { background: var(--soft); }
+.product-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 6;
+  max-height: 280px;
+  overflow: auto;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+.product-menu button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font: inherit;
+}
+.product-menu button[aria-selected="true"], .product-menu button:hover { background: var(--soft); }
+.product-pick .product-search {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 16px;
+}
+.product-menu p { margin: 0; color: var(--muted); font-size: 12px; }
 .drop {
   display: grid;
   justify-items: center;
