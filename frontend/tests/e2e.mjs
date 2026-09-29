@@ -69,12 +69,12 @@ try {
     readingId: "browser-reading",
     status: "ready",
     error: null,
-    fileName: "receipt.png",
+    fileName: "warehouse-receipt-scan-from-the-loading-dock-september-very-long-file-name.png",
     result: {
       date: catalog.today,
-      note: null,
+      note: "The extracted line amounts do not match the receipt total. Check for missing items, taxes, discounts or charges before adding purchases.",
       lines: [
-        { id: "0", printed: "Amul Taaza", productId: "", productName: "", packs: 2, pricePerPack: "30.00", matched: false, discarded: false },
+        { id: "0", printed: "Amul Taaza homogenized milk pouch with a long printed description", productId: "", productName: "", packs: 2, pricePerPack: "30.00", lineTotal: "60.00", note: "No unit rate could be read. Check the quantity; price was calculated from the line amount. Reference ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", matched: false, discarded: false },
         { id: "1", printed: "Mystery item", productId: "", productName: "", packs: 1, pricePerPack: "10.00", matched: false, discarded: false },
       ],
     },
@@ -124,6 +124,9 @@ try {
   await page.getByRole("button", { name: "Read receipt", exact: true }).click();
   const amul = page.locator(".receipt-line", { hasText: "Amul Taaza" });
   await expect(amul.getByText("Not one of this office's products.")).toBeVisible({ timeout: 10000 });
+  await expect(amul.getByText("Printed line amount: ₹60.00", { exact: true })).toBeVisible();
+  await expect(amul.getByRole("status")).toContainText("Check the quantity");
+  await page.screenshot({ path: path.join(os.tmpdir(), "pantry-receipt-desktop-review.png") });
   assert.equal(await page.locator(".receipt-review select").count(), 0);
   await amul.getByRole("button", { name: "Choose a product" }).click();
   await expect(amul.getByLabel("Search products")).toBeVisible();
@@ -141,6 +144,12 @@ try {
   await expect(mystery).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await expect(amul.getByText("Printed line amount: ₹60.00", { exact: true })).toBeVisible();
+  const receiptOverflow = await page.locator(".record-card").evaluate((card) => [...card.querySelectorAll("input, button, .note, .card-head > div, .choices")]
+    .filter((element) => element.getBoundingClientRect().right > innerWidth + 1)
+    .map((element) => ({ tag: element.tagName, className: element.className, right: element.getBoundingClientRect().right })));
+  assert.deepEqual(receiptOverflow, [], "Receipt controls and review notes must fit the mobile viewport.");
+  await page.screenshot({ path: path.join(os.tmpdir(), "pantry-receipt-mobile-review.png") });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Clear this receipt", exact: true }).click();
   await expect(page.getByText("Drop a PDF, JPEG, or PNG, or browse")).toBeVisible();

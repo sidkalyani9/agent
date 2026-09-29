@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api.js";
+import { api, rupee } from "../api.js";
 import { IconFile } from "../icons.jsx";
 import { ProductMenu } from "./ProductMenu.jsx";
 import { SettingsPanel } from "./SettingsPanel.jsx";
@@ -397,6 +397,7 @@ export function RecordPanel({ pantry, officeId, officeName, superAdmin, onSubmit
             <div className="fields">
               {reading.fileName ? <p className="note">{reading.fileName}</p> : null}
               {reading.result.note ? <p className="note">{reading.result.note}</p> : null}
+              {reading.result.note ? <p className="note">Editing packs or price does not redo this check.</p> : null}
               <label className="field">Date
                 <input type="date" max={pantry.today} value={reading.result.date || ""} onChange={(event) => changeDate(event.target.value)} />
               </label>
@@ -407,6 +408,8 @@ export function RecordPanel({ pantry, officeId, officeName, superAdmin, onSubmit
                       <strong>{line.printed}</strong>
                       <button className="texty" type="button" onClick={() => changeLine(line.id, { discarded: true }, true)}>Discard</button>
                     </div>
+                    {line.lineTotal ? <p className="note">Printed line amount: {rupee(line.lineTotal)}</p> : null}
+                    {line.note ? <p className="note" role="status">{line.note}</p> : null}
                     {line.productId ? null : <p className="note">Not one of this office's products. Add it on the Product tab, then choose it here.</p>}
                     <div className="field">
                       <span>Product</span>

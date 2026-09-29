@@ -482,7 +482,8 @@ a.microsoft { width: 100%; margin-top: 8px; }
   padding-bottom: 22px;
   border-bottom: 1px solid var(--line);
 }
-.card h2 { margin: 0; font-size: 20px; font-weight: 500; }
+.card h2 { margin: 0; font-size: 20px; font-weight: 500; overflow-wrap: anywhere; }
+.card-head > div { min-width: 0; max-width: 100%; }
 .products { display: grid; gap: 8px; margin-top: 12px; }
 .product {
   display: grid;
@@ -508,7 +509,7 @@ a.microsoft { width: 100%; margin-top: 8px; }
 :root[data-theme="dark"] .pill.on_track { color: #111; }
 .pill.due { background: var(--accent); color: white; }
 .pill.not_enough_history { background: transparent; color: var(--wait); border: 1px solid var(--line); }
-.note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 13px; }
+.note { grid-column: 1 / -1; margin: 0; min-width: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .product-editor { grid-column: 1 / -1; width: 100%; }
 .product-editor .fields { max-width: 620px; margin-top: 12px; }
@@ -628,7 +629,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .runway-copy dl div { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
 .runway-copy dt { color: var(--muted); font-size: 13px; }
 .runway-copy dd { margin: 0; font-variant-numeric: tabular-nums; }
-.lede-small { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+.lede-small { color: var(--muted); font-size: 13px; margin: 8px 0 0; overflow-wrap: anywhere; }
 .choices { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .choices.product-choices, .record-form .choices { justify-content: flex-start; }
 .search {
@@ -735,7 +736,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   background: var(--soft);
   cursor: pointer;
 }
-.drop span { font-weight: 500; color: var(--ink); }
+.drop span { font-weight: 500; color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
 .drop small { color: var(--muted); }
 .choice {
   border: 1px solid var(--line);
@@ -813,7 +814,8 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 @media (max-width: 980px) {
   .sign { grid-template-columns: 1fr; }
   .sign-hero { min-height: auto; padding: 28px 22px; }
-  .shell { grid-template-columns: 1fr; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .page, .record-card, .receipt-review, .receipt-line { min-width: 0; max-width: 100%; }
   .side {
     position: fixed;
     z-index: 8;

@@ -136,7 +136,7 @@ async def test_ask_model_payload_stays_a_tool_call(monkeypatch):
     assert captured["url"] == chat.COMPLETIONS
     assert captured["headers"]["Authorization"] == "Bearer test-key"
     body = captured["json"]
-    assert body["stream"] is False and body["temperature"] == 0.2 and body["max_tokens"] == 2000
+    assert body["stream"] is False and body["temperature"] == 0.2 and body["max_tokens"] == receipt_read.MAX_OUTPUT_TOKENS
     assert body["reasoning"] == {"enabled": False, "effort": "none"}
     assert "response_format" not in body and body["tool_choice"] == "auto"
     assert {tool["function"]["name"] for tool in body["tools"]} == {"lookup_item", "submit_receipt"}
@@ -190,7 +190,8 @@ async def test_lookup_then_submit_searches_once(api, offices, monkeypatch):
     assert reading["result"]["lines"][0]["printed"] == "Maggi" and reading["result"]["lines"][0]["matched"] is False
 
 
-async def test_pdf_reaches_the_model_as_jpeg(api, offices, monkeypatch):
+@pytest.mark.parametrize("scanned", [False, True])
+async def test_pdf_reaches_the_model_as_jpeg(api, offices, monkeypatch, scanned):
     seen = {}
 
     async def ask(messages, tool_choice):
@@ -201,6 +202,12 @@ async def test_pdf_reaches_the_model_as_jpeg(api, offices, monkeypatch):
     monkeypatch.setattr(receipt_read, "ask_model", ask)
     office = offices["Ahmedabad"]
     pdf = tiny_pdf()
+    if scanned:
+        import pymupdf
+        with pymupdf.open(stream=pdf, filetype="pdf") as original, pymupdf.open() as scan:
+            page = scan.new_page(width=240, height=240)
+            page.insert_image(page.rect, stream=original[0].get_pixmap(matrix=pymupdf.Matrix(2, 2)).tobytes("png"))
+            pdf = scan.tobytes()
     started = await api(f"/api/offices/{office}/receipt-readings", actor="manager", method="POST", body=upload(pdf, "bill.pdf"))
     assert started.status_code == 202
     await settle()
@@ -320,3 +327,373 @@ async def test_corrupt_pdf_fails_the_job(api, offices, monkeypatch):
     reading = (await api(f"/api/offices/{office}/receipt-readings/{started.json()['readingId']}", actor="manager")).json()
     assert reading["status"] == "failed"
     assert reading["error"] == "The receipt could not be read. Try a clearer PDF, JPEG, or PNG."
+
+
+@pytest.mark.parametrize("dpi", [72, 96, 300])
+def test_uploaded_image_keeps_native_pixels_regardless_of_dpi(dpi):
+    import pymupdf
+    pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 768, 1024), False)
+    pixmap.clear_with(255)
+    pixmap.set_dpi(dpi, dpi)
+    images, _ = receipt_read.page_images(pixmap.tobytes("png"), "image/png")
+    rendered = pymupdf.Pixmap(images[0])
+    assert (rendered.width, rendered.height) == (768, 1024)
+
+
+def test_large_noisy_scan_is_bounded_and_flattened(monkeypatch):
+    import pymupdf
+    import random
+    pixmap = pymupdf.Pixmap(pymupdf.csRGB, 900, 1200, random.Random(4).randbytes(900 * 1200 * 3), False)
+    monkeypatch.setattr(receipt_read, "MAX_JPEG", 100_000)
+    images, _ = receipt_read.page_images(pixmap.tobytes("png"), "image/png")
+    rendered = pymupdf.Pixmap(images[0])
+    assert len(images[0]) <= 100_000
+    assert max(rendered.width, rendered.height) <= receipt_read.MAX_EDGE and not rendered.alpha
+
+
+def test_native_pdf_text_is_optional_and_limited_to_read_pages():
+    assert receipt_read.receipt_text(PNG, "image/png") == ""
+    text = receipt_read.receipt_text(tiny_pdf(5), "application/pdf")
+    assert "Amul Taaza page 1" in text and "Amul Taaza page 4" in text
+    assert "page 5" not in text
+    import pymupdf
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_image(page.rect, stream=PNG)
+        assert "Amul" not in receipt_read.receipt_text(document.tobytes(), "application/pdf")
+
+
+def test_detail_views_keep_full_width_and_are_labelled_as_overlapping():
+    import pymupdf
+    images, _ = receipt_read.page_images(tiny_pdf(2), "application/pdf")
+    parts = receipt_read.detail_parts(images)
+    labels = [part["text"] for part in parts if part["type"] == "text"]
+    assert len(labels) == 4 and all("do not count rows twice" in label for label in labels)
+    assert "page 1" in labels[0] and "page 2" in labels[-1]
+    for part in parts:
+        if part["type"] == "image_url":
+            image = pymupdf.Pixmap(base64.b64decode(part["image_url"]["url"].split(",", 1)[1]))
+            assert image.width > image.height  # horizontal strips of a square page
+
+
+def evidence(packs="84", **values):
+    return {"printed": "Full cream milk", "productName": "Milk", "packs": packs,
+            "quantitySource": "Qty", "unitPrice": "32.94", "lineTotal": "2766.96", **values}
+
+
+async def test_conflicting_quantity_gets_one_reread_from_same_images(monkeypatch):
+    calls = []
+
+    async def ask(messages, choice):
+        calls.append((messages, choice))
+        return submit_message({"date": "2026-09-18", "receiptTotal": "2766.96", "lines": [evidence("34" if len(calls) == 1 else "84")]})
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    result = await receipt_read.extract(images, [{"id": "milk", "name": "Milk"}])
+    assert len(calls) == 2 and calls[1][1]["function"]["name"] == "submit_receipt"
+    assert result["lines"][0]["packs"] == 84 and result["lines"][0]["pricePerPack"] == "32.94"
+    assert "Re-read this receipt independently" in json.dumps(calls[1][0])
+
+
+@pytest.mark.parametrize("second", ["repeat", "failure", "drop_evidence", "drop_row"])
+async def test_unresolved_or_failed_reread_preserves_safe_review(monkeypatch, second):
+    calls = 0
+
+    async def ask(messages, choice):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            if second == "failure":
+                raise receipt_read.HttpError(502, "Temporary outage")
+            if second == "drop_row":
+                return submit_message({"lines": []})
+            if second == "drop_evidence":
+                return submit_message({"lines": [evidence("34", unitPrice="", lineTotal="")]})
+        return submit_message({"lines": [evidence("34")]})
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    result = await receipt_read.extract(images, [])
+    assert calls == 2 and len(result["lines"]) == 1
+    assert result["lines"][0]["packs"] == result["lines"][0]["pricePerPack"] == ""
+    assert "do not agree" in result["lines"][0]["note"]
+
+
+async def test_reread_can_remove_unused_rows_when_remaining_receipt_reconciles(monkeypatch):
+    calls = 0
+
+    async def ask(messages, choice):
+        nonlocal calls
+        calls += 1
+        unused = evidence("134" if calls == 1 else "", printed="Unused product", unitPrice="128.96", lineTotal="0")
+        return submit_message({"receiptTotal": "2766.96", "lines": [evidence(), unused]})
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    result = await receipt_read.extract(images, [])
+    assert calls == 2 and len(result["lines"]) == 1 and result["lines"][0]["packs"] == 84
+
+
+def test_submit_schema_asks_for_evidence_without_requiring_every_column():
+    line_schema = receipt_read.SUBMIT_SCHEMA["properties"]["lines"]["items"]
+    assert line_schema["required"] == ["printed", "productName", "packs", "unitPrice", "lineTotal"]
+    assert {"quantitySource", "baseAmount", "discount"} <= set(line_schema["properties"])
+    assert "printedDate" in receipt_read.SUBMIT_SCHEMA["properties"]
+
+
+def test_prompt_copies_printed_evidence_and_does_not_encode_one_bill():
+    prompt = receipt_read.system_prompt([{"name": "Milk"}])
+    assert "printedDate" in prompt and "never calculate" in prompt.lower()
+    assert "7000" not in prompt and "2766" not in prompt and "column 1" not in prompt.lower()
+
+
+@pytest.mark.parametrize(("printed", "proposed", "iso", "fragment"), [
+    ("2/9/2025", "2025-02-09", "2025-09-02", "day/month/year"),
+    ("02-09-2025", "", "2025-09-02", "day/month/year"),
+    ("Date: 2 / 9 / 2025", "", "2025-09-02", "day/month/year"),
+    ("13/9/2025", "", "2025-09-13", None),
+    ("9/13/2025", "", "2025-09-13", None),
+    ("2025/9/2", "", "2025-09-02", None),
+    ("2 Sep 2025", "", "2025-09-02", None),
+    ("Sep 2, 2025", "", "2025-09-02", None),
+    ("2nd September 2025", "", "2025-09-02", None),
+    ("Dated: 2/9/2025", "2025-02-09", "2025-09-02", "day/month/year"),
+    ("Invoice Dated: 13/09/2025", "2025-02-09", "2025-09-13", None),
+    ("2025 Sep 2", "2025-02-09", "2025-09-02", None),
+    ("2025-Sep-02", "2025-02-09", "2025-09-02", None),
+    ("", "2025-02-09", "2025-02-09", None),
+    ("", "", "", None),
+])
+def test_printed_dates_follow_day_month_year_only_when_ambiguous(printed, proposed, iso, fragment):
+    stored, note = receipt_read.interpret_date(printed, proposed)
+    assert stored == iso
+    if fragment:
+        assert fragment in note
+    else:
+        assert note is None
+
+
+def test_unparsed_printed_date_keeps_a_usable_model_date_and_says_so():
+    stored, note = receipt_read.interpret_date("2/9/25", "2025-09-02")
+    assert stored == "2025-09-02" and "could not be parsed" in note
+
+
+def test_impossible_year_first_month_keeps_a_usable_model_date():
+    stored, note = receipt_read.interpret_date("2025 Feb 31", "2025-02-09")
+    assert stored == "2025-02-09" and "could not be parsed" in note
+
+
+def test_future_printed_date_is_left_blank():
+    stored, note = receipt_read.interpret_date("1/1/2099", "")
+    assert stored == "" and "could not be used" in note
+
+
+def test_checked_normalize_uses_the_printed_date_instead_of_a_swapped_iso_date():
+    result = receipt_read.normalize(
+        {"printedDate": "2/9/2025", "date": "2025-02-09", "lines": [{"printed": "Soap", "packs": 2, "pricePerPack": "30"}]},
+        [],
+        checked=True,
+    )
+    assert result["date"] == "2025-09-02" and "day/month/year" in result["note"]
+
+
+def test_checked_normalize_says_when_no_purchase_date_was_read():
+    result = receipt_read.normalize(
+        {"lines": [{"printed": "Soap", "packs": 2, "pricePerPack": "30.00", "lineTotal": "60.00"}]},
+        [],
+        checked=True,
+    )
+    assert result["date"] == "" and "No purchase date could be read." in result["note"]
+
+
+def test_unchecked_normalize_does_not_add_a_missing_date_note():
+    result = receipt_read.normalize(
+        {"date": "", "lines": [{"printed": "Soap", "packs": 2, "pricePerPack": "30"}]},
+        [],
+        checked=False,
+    )
+    assert result["date"] == "" and (result["note"] is None or "No purchase date" not in result["note"])
+
+
+def test_pdf_text_failure_does_not_raise(monkeypatch):
+    import pymupdf
+
+    class Boom:
+        def __enter__(self):
+            raise RuntimeError("text failed")
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(pymupdf, "open", lambda *args, **kwargs: Boom())
+    assert receipt_read.receipt_text(b"%PDF-1.4", "application/pdf") == ""
+
+
+async def test_reread_keeps_corrected_lines_when_the_total_changes(monkeypatch):
+    calls = 0
+
+    async def ask(messages, choice):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return submit_message({"receiptTotal": "3000", "printedDate": "2/9/2025", "lines": [evidence("34")]})
+        return submit_message({"receiptTotal": "2766.96", "printedDate": "2/9/2025", "lines": [evidence("84")]})
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    result = await receipt_read.extract(images, [])
+    assert calls == 2 and result["lines"][0]["packs"] == 84
+    assert "₹3000.00" in result["note"] and "do not match" in result["note"]
+    assert "first reading" in result["note"] and result["date"] == "2025-09-02"
+
+
+async def test_reread_timeout_returns_the_first_checked_result(monkeypatch):
+    calls = 0
+
+    async def ask(messages, choice):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise TimeoutError()
+        return submit_message({"lines": [evidence("34")]})
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    result = await receipt_read.extract(images, [])
+    assert calls == 2 and result["lines"][0]["packs"] == ""
+    assert "do not agree" in result["lines"][0]["note"]
+
+
+async def test_timeout_before_any_reading_still_fails(monkeypatch):
+    async def ask(messages, choice):
+        raise TimeoutError()
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    with pytest.raises(receipt_read.HttpError, match="could not be read"):
+        await receipt_read.extract(images, [])
+
+
+def soap(line_total="60", **values):
+    return {"printed": "Soap", "packs": "2", "unitPrice": "30", "lineTotal": line_total, **values}
+
+
+async def test_reread_cannot_balance_with_a_new_adjustment(monkeypatch):
+    calls = 0
+
+    async def ask(messages, choice):
+        nonlocal calls
+        calls += 1
+        body = {"receiptTotal": "100", "lines": [soap()]}
+        if calls == 2:
+            body["adjustments"] = [{"label": "Charge", "amount": "40"}]
+        return submit_message(body)
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    result = await receipt_read.extract(images, [])
+    assert calls == 2 and result["lines"][0]["packs"] == 2 and result["lines"][0]["pricePerPack"] == "30.00"
+    assert "do not match" in result["note"]
+
+
+async def test_reread_cannot_replace_a_line_amount_to_balance(monkeypatch):
+    calls = 0
+
+    async def ask(messages, choice):
+        nonlocal calls
+        calls += 1
+        line = soap() if calls == 1 else soap("100", unitPrice="50")
+        return submit_message({"receiptTotal": "100", "lines": [line]})
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    result = await receipt_read.extract(images, [])
+    assert calls == 2 and result["lines"][0]["pricePerPack"] == "30.00"
+    assert "do not match" in result["note"]
+
+
+async def test_reread_cannot_drop_a_line_and_invent_a_matching_total(monkeypatch):
+    calls = 0
+
+    async def ask(messages, choice):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            oil = {"printed": "Oil", "packs": "?", "unitPrice": "10", "lineTotal": "40"}
+            return submit_message({"lines": [soap(), oil]})
+        return submit_message({"receiptTotal": "60", "lines": [soap()]})
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    result = await receipt_read.extract(images, [])
+    assert calls == 2 and [line["printed"] for line in result["lines"]] == ["Soap", "Oil"]
+    assert result["lines"][0]["packs"] == 2 and result["lines"][0]["pricePerPack"] == "30.00"
+
+
+async def test_reread_cannot_hide_missing_rows_by_changing_receipt_total(monkeypatch):
+    calls = 0
+
+    async def ask(messages, choice):
+        nonlocal calls
+        calls += 1
+        return submit_message({"receiptTotal": "3000" if calls == 1 else "2766.96", "lines": [evidence()]})
+
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    images, _ = receipt_read.page_images(PNG, "image/png")
+    result = await receipt_read.extract(images, [])
+    assert calls == 2 and "₹3000.00" in result["note"] and "do not match" in result["note"]
+
+
+async def test_verified_values_and_review_notes_survive_draft_roundtrip(api, db, offices, monkeypatch):
+    async def ask(messages, choice):
+        return submit_message({"date": "2026-09-18", "lines": [evidence("34")]})
+
+    monkeypatch.setenv("TOKENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(receipt_read, "ask_model", ask)
+    office = offices["Ahmedabad"]
+    started = await api(f"/api/offices/{office}/receipt-readings", actor="manager", method="POST", body=upload(PNG))
+    await settle()
+    path = f"/api/offices/{office}/receipt-readings/{started.json()['readingId']}"
+    draft = (await api(path, actor="manager")).json()
+    item = draft["result"]["lines"][0]
+    assert item["packs"] == "" and item["lineTotal"] == "2766.96" and item["note"]
+    refused = await api(path + "/save", actor="manager", method="POST", body={"date": "2026-09-18", "lines": [item]})
+    assert refused.status_code == 422
+    updated = (await api(path, actor="manager", method="PATCH", body={"lines": [{**item, "packs": 84, "pricePerPack": "32.94"}]})).json()
+    fixed = updated["result"]["lines"][0]
+    assert fixed["note"] is None and fixed["lineTotal"] == "2766.96"
+    saved = await api(path + "/save", actor="manager", method="POST", body={"date": "2026-09-18", "lines": [fixed]})
+    assert saved.status_code == 200 and saved.json()["purchases"][0]["packs"] == 84
+
+
+async def test_truncated_response_is_not_accepted_as_complete_receipt(monkeypatch):
+    class Response:
+        is_success = True
+
+        def json(self):
+            return {"choices": [{"finish_reason": "length", "message": submit_message({"lines": [evidence()]})}]}
+
+    async def post(self, *args, **kwargs):
+        return Response()
+
+    monkeypatch.setenv("TOKENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(receipt_read.httpx.AsyncClient, "post", post)
+    with pytest.raises(receipt_read.HttpError, match="response was incomplete"):
+        await receipt_read.ask_model([], "auto")
+
+
+async def test_provider_error_inside_http_200_is_not_an_empty_receipt(monkeypatch):
+    class Response:
+        is_success = True
+
+        def json(self):
+            return {"error": {"code": 502, "message": "Provider capacity exhausted"}, "usage": {}}
+
+    async def post(self, *args, **kwargs):
+        return Response()
+
+    monkeypatch.setenv("TOKENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(receipt_read.httpx.AsyncClient, "post", post)
+    with pytest.raises(receipt_read.HttpError, match="could not be read"):
+        await receipt_read.ask_model([], "auto")
