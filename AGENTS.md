@@ -14,13 +14,13 @@ Any sibling `Acocunts Agent - MVP` is the frozen local demo. Do not edit it, sta
 
 Intuitive's internal pantry tracker for every office a Super Admin adds. People record products, purchases, and shelf counts. The server computes on-hand stock, burn rate, expected run-out, status, and monthly spend. The browser displays those figures.
 
-Client: React and Vite, `client/`, http://127.0.0.1:5173/
+Client: React and Vite, `frontend/`, http://127.0.0.1:5173/
 
-API: Express, `server/index.js`, http://127.0.0.1:8787/
+API: Python/FastAPI, `backend/pantry/app.py`, http://127.0.0.1:8787/
 
-Data: local development uses SQLite at `server/data/pantry.sqlite`. Production uses PostgreSQL through `DATABASE_URL` and Azure Blob for receipts. `server/database.js` exposes asynchronous operations and connection/transaction scopes; await service calls. Passing an explicit database filename always selects SQLite, keeping tests off the production database.
+Data: new checkouts use SQLite at `backend/data/pantry.sqlite`. Existing `server/data/` remains the default when present; `PANTRY_DATA_DIR` can explicitly override it. Never silently initialize an empty pantry beside existing data. Production uses PostgreSQL through `DATABASE_URL` and Azure Blob for receipts. `backend/pantry/database.py` exposes asynchronous operations and connection/transaction scopes; await service calls. Passing an explicit database filename always selects SQLite, keeping tests off the production database.
 
-Use Node.js 24 LTS. Start from this folder with `npm run dev`. `npm start` runs the API and serves `client/dist` when built. `npm run build` builds the client.
+Use Python 3.12 for the backend and Node.js 24 LTS for frontend tooling. Install the virtual environment/dependencies as described in README.md. Start from this folder with `npm run dev`. `npm start` runs the API and serves `frontend/dist` when built. `npm run build` builds the client.
 
 Use commands appropriate to the environment's actual shell. Do not infer PowerShell from old Windows paths.
 
@@ -46,7 +46,7 @@ Where this repo and that architecture text disagree, keep the behavior in this f
 
 The visual system is already chosen. New screens, components, and states must use it. Do not introduce a second palette, a second font, a gradient, a card style from another product, or a component library skin.
 
-Source of truth for tokens: `client/src/styles.css`. Use the variables. Do not hard-code a new hex when a variable exists.
+Source of truth for tokens: `frontend/src/styles.css`. Use the variables. Do not hard-code a new hex when a variable exists.
 
 | Token | Light | Dark |
 | --- | --- | --- |
@@ -61,16 +61,16 @@ Source of truth for tokens: `client/src/styles.css`. Use the variables. Do not h
 
 Accent `#e90003` is for small marks only: the sign-in kicker, focus ring, eyebrows, and status highlights. Do not fill large areas with red. Do not change the accent.
 
-Font is Satoshi only, files in `client/public/fonts/`: Light 300, Regular 400, Medium 500, Bold 700, Black 900. Body size is 16px. Do not load Inter, Roboto, Arial, or a webfont from a third party.
+Font is Satoshi only, files in `frontend/public/fonts/`: Light 300, Regular 400, Medium 500, Bold 700, Black 900. Body size is 16px. Do not load Inter, Roboto, Arial, or a webfont from a third party.
 
-Logos and marks, `client/public/brand/`:
+Logos and marks, `frontend/public/brand/`:
 
 - Top bar and the dark sign-in hero: `/brand/logo-on-dark.svg` on black (`#000`). The top bar stays black in light and dark.
 - Light surfaces that need a logo: `/brand/logo-on-light.svg`.
 - Favicon: `/brand/Intuitive Favicon Primary.svg`.
 - Do not redraw the logo, recolor it, or substitute a wordmark.
 
-Theme choice is `localStorage` key `aim-theme`: `light`, `dark`, or `system`. Default is light. `client/index.html` loads the external `client/public/theme.js` before paint so it works under production CSP. `documentElement.dataset.theme` is `light` or `dark`. `dataset.themeChoice` keeps the user's choice. System follows `prefers-color-scheme`.
+Theme choice is `localStorage` key `aim-theme`: `light`, `dark`, or `system`. Default is light. `frontend/index.html` loads the external `frontend/public/theme.js` before paint so it works under production CSP. `documentElement.dataset.theme` is `light` or `dark`. `dataset.themeChoice` keeps the user's choice. System follows `prefers-color-scheme`.
 
 Shape and chrome:
 
@@ -83,7 +83,7 @@ Shape and chrome:
 - Left nav: Record, Stock, Charts, Activity. Super Admin also gets Access. The assistant is not a nav item.
 - Assistant is the round launcher at the bottom right (`ChatDock`).
 - Active nav item uses the ink fill, same as `.solid`.
-- Money is INR through `rupee()` in `client/src/api.js`. Dates display as India dates. Empty money and dates currently render a dash. New client sentences do not use an em dash. Role and status copy uses "No" or a full sentence.
+- Money is INR through `rupee()` in `frontend/src/api.js`. Dates display as India dates. Empty money and dates currently render a dash. New client sentences do not use an em dash. Role and status copy uses "No" or a full sentence.
 - Copy is short, concrete, and in the voice already on the screen. No model name, no "how this was worked out", no chart methodology essay.
 
 When a UI change is made, open http://127.0.0.1:5173/ and use the feature the way a person would. Check the other screens that share the component or the data. Check a desktop width and a 390px width. Fix what breaks before finishing.
@@ -109,7 +109,7 @@ Invite flow, Super Admin only, Access screen:
 
 Chosen passwords: at least 12 characters, at most 128, one uppercase, one lowercase, one number, no leading or trailing space, not a common password, and not containing the mailbox name. The new password must differ from the invite password. Five wrong attempts lock the account for 15 minutes.
 
-Seeded Super Admin: `Siddharth.Kalyani@intuitive.AI`. Production databases start with that person and no offices. Fixture mode (`PANTRY_SEED=fixtures` or `openDatabase(file, { seed: "fixtures" })`) is for tests only. Do not turn fixture seed on in `.env`.
+Seeded Super Admin: `Siddharth.Kalyani@intuitive.AI`. Production databases start with that person and no offices. Fixture mode (`PANTRY_SEED=fixtures` or `await open_database(file, seed="fixtures")`) is for tests only. Do not turn fixture seed on in `.env`.
 
 Roles are grants in the app, not Entra roles:
 
@@ -134,7 +134,7 @@ Sessions:
 
 ## Pantry rules that tests already lock
 
-Calculations live in `server/calc.js`. Do not reimplement them in the client.
+Calculations live in `backend/pantry/calc.py`. Do not reimplement them in the client.
 
 - A count on a date already includes purchases dated that day.
 - On-hand walks from the day after the count. Each day adds that day's purchases, then subtracts burn times that day's weight.
@@ -150,8 +150,8 @@ Calculations live in `server/calc.js`. Do not reimplement them in the client.
 - Spend is packs times price per pack on purchases that are not soft-deleted. Amounts are INR.
 - Nothing in pantry stock is hard-deleted. Hide, withdraw, and remove set `deleted_at` and `deleted_by`.
 - `created_by` and `created_at` stay as first written.
-- A failed receipt upload still keeps the purchase. Receipts are PDF, JPEG, or PNG, checked from the file bytes, at most 10MB, stored locally under `PANTRY_DATA_DIR/receipts` (default `server/data`) or in private Azure Blob Storage. Immutable versioned object names preserve older receipts for backup recovery. Downloads require office access and are attachments. Type checks are not a malware scanner.
-- Chat stock questions are answered by `factualReply` in `server/chat.js` from live pantry data, before any model call.
+- A failed receipt upload still keeps the purchase. Receipts are PDF, JPEG, or PNG, checked from the file bytes, at most 10MB, stored locally under `PANTRY_DATA_DIR/receipts` (new default `backend/data`, or existing `server/data`) or in private Azure Blob Storage. Immutable versioned object names preserve older receipts for backup recovery. Downloads require office access and are attachments. Type checks are not a malware scanner.
+- Chat stock questions are answered by `factual_reply` in `backend/pantry/chat.py` from live pantry data, before any model call.
 - The model is TokenRouter at `https://api.tokenrouter.com/v1/chat/completions`, model `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`, key in `OPENROUTER_API_KEY` or `TOKENROUTER_API_KEY`. Do not print the key. Do not set `NODE_TLS_REJECT_UNAUTHORIZED`. This app deletes that variable for its own processes.
 - Replies stream over `POST /api/chat` when `stream` is true. SSE events are `thread`, `delta`, `replace`, `done`, and `error`. The JSON path remains.
 - Follow-ups stay on `threadId`. Errors still return `threadId`.
@@ -167,28 +167,19 @@ Calculations live in `server/calc.js`. Do not reimplement them in the client.
 - Do not log invite passwords, session cookies, refresh tokens, or the API key.
 - Rate limits exist on login, refresh, and the API. Keep them.
 - Bind the API to `127.0.0.1` unless `WEBSITE_SITE_NAME` or `PANTRY_HOST` says otherwise.
-- `.env`, `server/data/`, and `node_modules/` stay untracked. `server/data/pantry.sqlite.mvp-backup` is the old demo database. Do not delete it and do not point the app at it.
+- `.env`, `backend/data/`, legacy `server/data/`, Python virtual environments, and `node_modules/` stay untracked. `server/data/pantry.sqlite.mvp-backup` is the old demo database. Do not delete it and do not point the app at it.
 - Production startup requires HTTPS, PostgreSQL, Blob configuration, strong session secret and Microsoft credentials; fixtures are forbidden. Never weaken those checks to make deployment work.
 - Preserve transaction scopes and parameterized values when changing SQLite/PostgreSQL queries. App Service starts with one process/instance; rate limits are per-process. Do not scale out without revisiting abuse limits and load-testing the coarse database lock.
 
 ## Tests and commits
 
-`npm test` runs every `server/*.test.js`, including:
-
-- `server/calc.test.js`
-- `server/identity.test.js`
-- `server/password.test.js`
-- `server/service.test.js`
-- `server/chat.scope.test.js`
-- `server/security.test.js`
-- `server/http.test.js`
-- `server/postgres.test.js`
+`npm test` runs the complete Python suite in `backend/tests/`: calculation/service golden contracts captured from Node, auth, live roles, inventory, HTTP/security, chat/SSE, Microsoft/Graph/Blob mocks, real PostgreSQL and packaged runtime startup. Build the frontend before the full suite (`npm run build`). [Migration evidence](documents/PYTHON_MIGRATION.md) records the baseline and coverage.
 
 Before any commit, run the whole suite. All of it must pass. Do not commit a red suite, a skipped file, or a focused `only` test.
 
 When you change calculation, stock, spend, auth, invites, roles, chat scope, delete confirmation, or an API status code, add or update a test that fails if the old bug returns. Then run the whole suite, not only the new file.
 
-Tests use temporary SQLite files or isolated PGlite PostgreSQL engines. They must not open `server/data/pantry.sqlite` or use real Azure credentials. PostgreSQL tests prove engine behavior, not Azure networking/TLS. Run `npm run build` and `npm run test:browser` for client changes; the latter starts a temporary app on 5173 and needs Playwright Chromium (or `PANTRY_BROWSER_CHANNEL=chrome`).
+Tests use temporary SQLite files and real isolated PostgreSQL databases. Install PostgreSQL binaries locally or set `PANTRY_TEST_POSTGRES_URL` to a disposable test service; the suite must fail, not skip, if unavailable. They must not open `server/data/pantry.sqlite` or use real Azure credentials. PostgreSQL tests prove engine behavior, not Azure networking/TLS. Run `npm run build` and `npm run test:browser` for client changes; the latter starts temporary FastAPI on a free loopback port and needs Playwright Chromium (or `PANTRY_BROWSER_CHANNEL=chrome`).
 
 A UI change is not done when the suite is green alone. Also use the screen, as the theme section says.
 
@@ -196,9 +187,11 @@ Do not commit secrets, the live database, or a generated invite password. Write 
 
 ## Layout of the code
 
-- `server/calc.js` computes. `server/service.js` stores and authorizes. `server/chat.js` answers. `server/passwords.js` hashes passwords and signs tokens. `server/identity.js` checks the Microsoft identity. `server/entra.js` runs the Microsoft login. `server/index.js` is the HTTP surface. `server/http.js` and `server/secret.js` are headers, cookies, and encryption.
-- `server/config.js` validates production settings; `database.js` provides SQLite/PostgreSQL scopes and transactions; `receipts.js` provides local/managed-identity Blob I/O. `migration.js` and `scripts/migrate-to-postgres.mjs` perform an explicit, source-preserving migration to an empty PostgreSQL destination. Never run execution against live data without the user's cutover authorization.
-- `client/src/screens/Dashboard.jsx` is the shell. `SignIn.jsx` is sign-in and set-password. `OfficeBar.jsx` switches offices and adds an office. `AccessPanel.jsx` invites and assigns roles. `RecordPanel.jsx` records. `PantryCharts.jsx` draws charts. `ChatPanel.jsx` is the assistant.
+- `backend/pantry/calc.py` computes. `core.py` handles schema, time and live authorization. `accounts.py`, `inventory.py` and `conversations.py` store and authorize their own operations. `chat.py` answers and calls model tools. `passwords.py` hashes passwords/signs tokens; `identity.py` checks Microsoft claims; `entra.py` performs OIDC/PKCE and Graph calls.
+- `app.py`, `auth_routes.py`, `routes.py` and `chat_routes.py` expose HTTP and SSE. `http.py` enforces headers, cookies, rate limits and CSRF; `secret.py` handles compatible token encryption. `compat.py` preserves JavaScript numeric/text semantics where required by the existing contract.
+- `config.py` validates production settings; `database.py` provides SQLite/PostgreSQL scopes and nested transactions; `receipts.py` provides immutable local/managed-identity Blob I/O. `python -m pantry.migration` (with `PYTHONPATH=backend`) performs explicit, source-preserving migration to empty PostgreSQL. Never run execution against live data without the user's cutover authorization.
+- Root scripts are convenience/build tooling. `scripts/package_release.py` stages only Python runtime, requirements, startup and frontend assets; production does not need Node. CI tests Python 3.12, PostgreSQL and Node 24, then uploads a release artifact without deploying it.
+- `frontend/src/screens/Dashboard.jsx` is the shell. `SignIn.jsx` is sign-in and set-password. `OfficeBar.jsx` switches offices and adds an office. `AccessPanel.jsx` invites and assigns roles. `RecordPanel.jsx` records. `PantryCharts.jsx` draws charts. `ChatPanel.jsx` is the assistant.
 - `ProductEditor.jsx` edits name/reorder/warning in Stock. `Purchases.jsx` lists monthly purchases and retrieves receipts through authenticated API requests.
 - Record kinds are Purchase, Count, Product, and Settings for a Super Admin. There is no Office kind on that form. Offices are added from the office bar. All offices cannot record. The bar must name one office first.
 

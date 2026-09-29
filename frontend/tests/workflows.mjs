@@ -1,0 +1,138 @@
+import assert from 'node:assert/strict';
+import { expect } from '@playwright/test';
+
+export async function extendedWorkflows({ page, browser, app }) {
+  const nav = async name => page.getByRole('button', { name, exact: true }).click();
+  const office = async name => {
+    await page.locator('.office-pick > button').click();
+    await page.getByRole('option', { name, exact: true }).click();
+  };
+  await nav('Add office');
+  const form = page.locator('.office-form');
+  await form.getByLabel('Office name', { exact: true }).fill('Browser Annex');
+  await form.getByLabel('Search people').fill(app.manager.email);
+  await form.getByRole('button', { name: new RegExp(app.manager.email.replaceAll('.', '\\.')) }).click();
+  await form.getByRole('button', { name: 'Add office', exact: true }).click();
+  await expect(page.locator('.office-pick > button')).toHaveText('Browser Annex');
+  await expect(page.getByRole('heading', { name: 'Coffee', exact: true })).toBeVisible();
+  await office('All offices');
+  await expect(page.getByRole('heading', { name: 'Browser Annex', exact: true })).toBeVisible();
+  await office('Ahmedabad');
+  await nav('Record');
+  await nav('Product');
+  await page.locator('.record-form').getByLabel('Name', { exact: true }).fill('Browser oats');
+  await nav('Save');
+  await expect(page.locator('.record-form').getByLabel('Name', { exact: true })).toHaveValue('');
+  await nav('Count');
+  await page.locator('.record-form select').selectOption({ label: 'Browser oats' });
+  await page.getByLabel('Packs', { exact: true }).fill('8');
+  await nav('Save');
+  await expect(page.getByLabel('Packs', { exact: true })).toHaveValue('');
+  await nav('Settings');
+  await page.getByLabel('Lookback months').fill('4');
+  await page.getByLabel('Weekend weight').fill('0.3');
+  await nav('Save');
+  await expect(page.getByLabel('Lookback months')).toHaveValue('');
+  await nav('Stock');
+  await expect(page.getByRole('heading', { name: 'Browser oats', exact: true })).toBeVisible();
+  const download = page.waitForEvent('download');
+  await nav('Download month');
+  const csv = await download;
+  assert.match(csv.suggestedFilename(), /^Ahmedabad-\d{4}-\d{2}\.csv$/);
+  const stream = await csv.createReadStream();
+  let content = '';
+  for await (const chunk of stream) content += chunk;
+  assert.ok(content.includes('Coffee beans') && content.includes('25.50'));
+  await nav('Charts');
+  await expect(page.locator('main.page svg').first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Stock', exact: true })).toBeVisible();
+  await nav('Activity');
+  await expect(page.locator('main.page')).toContainText('Browser oats');
+
+  await nav('Open assistant');
+  const chat = page.getByRole('dialog', { name: 'Assistant' });
+  const send = async text => {
+    await chat.getByLabel('Message the assistant').fill(text);
+    await chat.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(chat.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+  };
+  await send('how much milk is left at Ahmedabad?');
+  await expect(chat.locator('.bubble.assistant').last()).toContainText('Milk');
+  await send('delete Browser oats at Ahmedabad');
+  await expect(chat.getByRole('button', { name: 'Confirm', exact: true })).toBeVisible();
+  await chat.getByRole('button', { name: 'Leave unsaved' }).click();
+  await expect(chat.getByRole('button', { name: 'Confirm', exact: true })).toHaveCount(0);
+  await send('delete Browser oats at Ahmedabad');
+  await chat.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(chat.locator('.bubble.assistant').last()).toContainText(/deleted|removed/i);
+  await chat.getByRole('button', { name: 'Past chats' }).click();
+  await expect(chat.locator('.thread-row').first()).toBeVisible();
+  await chat.locator('.thread-row').first().click();
+  await expect(chat.locator('.bubble.assistant').last()).toContainText(/deleted|removed/i);
+  await chat.getByRole('button', { name: 'Close assistant', exact: true }).click();
+  await nav('Stock');
+  await expect(page.getByRole('heading', { name: 'Browser oats', exact: true })).toHaveCount(0);
+
+  await nav('Access');
+  const email = 'browser.invitee@intuitive.AI';
+  await page.getByLabel('Email to invite').fill(email);
+  await page.locator('.access-form').first().getByLabel('Name', { exact: true }).fill('Browser Invitee');
+  await nav('Invite');
+  const temporary = await page.locator('.invite-secret code').innerText();
+  const grant = page.locator('.access-form').last();
+  await grant.getByLabel('Name', { exact: true }).fill('Browser Invitee');
+  await grant.getByLabel('Sign-in name').fill(email);
+  await grant.locator('select').first().selectOption('accounts');
+  await grant.locator('select').last().selectOption({ label: 'Ahmedabad' });
+  await nav('Save access');
+  await expect(page.getByText('Access saved.', { exact: true })).toBeVisible();
+  const invited = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  try {
+    const user = await invited.newPage();
+    await user.goto(app.base);
+    await user.getByLabel('Email', { exact: true }).fill(email);
+    await user.getByLabel('Password', { exact: true }).fill(temporary);
+    await user.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(user.getByRole('heading', { name: 'Choose a password' })).toBeVisible();
+    await expect(user.getByLabel('Email', { exact: true })).toHaveValue(email);
+    await user.getByLabel('New password', { exact: true }).fill('Invited pantry door 42');
+    await user.getByLabel('Confirm password', { exact: true }).fill('Invited pantry door 42');
+    await user.getByRole('button', { name: 'Save password' }).click();
+    await expect(user.getByRole('heading', { name: 'Coffee beans', exact: true })).toBeVisible();
+    assert.equal(await user.getByText('Edit Coffee beans', { exact: true }).count(), 0);
+    await user.getByRole('button', { name: 'Open menu' }).click();
+    assert.equal(await user.getByRole('button', { name: 'Access', exact: true }).count(), 0);
+    await user.getByRole('button', { name: 'Record', exact: true }).click();
+    await expect(user.getByText(/It cannot change the pantry/)).toBeVisible();
+    const person = page.locator('.access-list li').filter({ hasText: email });
+    await person.getByRole('button', { name: /Remove Accounts/ }).click();
+    await expect(person).toContainText('No role yet');
+    await user.reload();
+    await expect(user.getByText(/No office/).first()).toBeVisible();
+    await person.getByRole('button', { name: 'Turn off' }).click();
+    await expect(person).toContainText('Turned off');
+    await user.reload();
+    await expect(user.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+    await person.getByRole('button', { name: 'Turn on' }).click();
+    await expect(person.getByRole('button', { name: 'Turn off' })).toBeVisible();
+    await user.reload();
+    await expect(user.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+  } finally { await invited.close(); }
+  // Read-only Admin sees all offices, but cannot write or administer access.
+  const observer = await browser.newContext();
+  try {
+    const user = await observer.newPage();
+    await user.goto(app.base);
+    await user.getByLabel('Email', { exact: true }).fill(app.observer.email);
+    await user.getByLabel('Password', { exact: true }).fill(app.password);
+    await user.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(user.getByRole('button', { name: 'Stock', exact: true })).toBeVisible();
+    assert.equal(await user.getByRole('button', { name: 'Access', exact: true }).count(), 0);
+    assert.equal(await user.getByRole('button', { name: 'Add office', exact: true }).count(), 0);
+    await user.locator('.office-pick > button').click();
+    await user.getByRole('option', { name: 'All offices', exact: true }).click();
+    await expect(user.getByRole('heading', { name: 'Browser Annex', exact: true })).toBeVisible();
+  } finally { await observer.close(); }
+  await nav('Stock');
+}

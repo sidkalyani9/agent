@@ -42,12 +42,14 @@ The review also added fail-closed production configuration, generic unexpected e
 
 ## Verification evidence
 
-- Full automated suite: 42 tests passing, no skipped or focused tests.
-- PostgreSQL: syntax, case-insensitive uniqueness, transactions, sessions, concurrent refresh reuse, scoped writes, exports and chat ordering exercised with PGlite.
+- FastAPI migration: 209 Python tests passing, no skipped or focused tests. The original Node baseline had 42 passing tests. Detailed checklist, comparison rules and reproduction are in [Python migration evidence](PYTHON_MIGRATION.md).
+- PostgreSQL: syntax, case-insensitive uniqueness, transactions, sessions, concurrent refresh reuse, scoped writes, exports and chat ordering exercised against real isolated PostgreSQL (15.3 locally; the checks workflow supplies PostgreSQL 16).
 - Migration: pantry data, chosen password hashes and receipt mapping preserved; nonempty destination refused; induced failure rolls back database rows; sessions deliberately excluded.
 - Real local HTTP server: unauthenticated/forbidden access, CSRF, role checks, receipt upload/download, bad-file handling and refresh replay.
-- Real Chromium browser: password login, product edit, receipt download, shared screens, theme persistence, two-tab refresh, simulated return using persisted cookies, mobile layout and logout.
-- Production client build succeeds. Dependency audit reports zero known vulnerabilities at review time. This is not a guarantee against unknown vulnerabilities or a substitute for a penetration test.
+- Real Chrome browser: password login, product create/edit, office/manager controls, purchases/counts/settings, receipt and CSV download, charts/activity, chat streaming/confirmation/history, invitation/password setup, live role removal, disabling/re-enabling, read-only roles, theme, two-tab refresh, persisted cookies, 390px mobile layout and logout. CI installs Playwright Chromium.
+- Production frontend build and packaged Python startup/restart pass. A clean runtime-only Python dependency installation also runs the complete browser suite. Python runtime and full frontend dependency audits report zero known vulnerabilities at migration review time. This is not a guarantee against unknown vulnerabilities or a substitute for a penetration test.
+
+All 28 frontend source/asset files remain byte-for-byte identical after moving to `frontend/`. Existing local data stays in place; existing Node credentials, refresh families and pending setup tickets are tested across Python database reopen. GitHub workflow changes are validated locally; hosted CI runs after pushing.
 
 All automated data is disposable. Azure TLS/network/firewall/managed identity and a real Entra sign-in still require the deployment checklist.
 

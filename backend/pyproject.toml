@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intuitive-pantry-backend"
+version = "1.0.0"
+description = "Intuitive pantry FastAPI backend"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi==0.141.1", "uvicorn==0.54.0", "httpx==0.28.1",
+  "psycopg[binary,pool]==3.3.6", "cryptography==50.0.1", "PyJWT==2.15.0",
+  "python-dotenv==1.2.3", "azure-identity==1.25.3", "azure-storage-blob==12.30.3",
+]
+
+[tool.setuptools.packages.find]
+include = ["pantry*"]
+
+[tool.setuptools.package-data]
+pantry = ["*.sql", "*.json", "*.txt"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+markers = ["postgres: requires PANTRY_TEST_POSTGRES_URL pointing to a disposable PostgreSQL database"]

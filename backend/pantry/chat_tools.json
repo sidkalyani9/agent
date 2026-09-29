@@ -1,0 +1,182 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "list_offices",
+      "description": "Offices this person can open.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_pantry",
+      "description": "Live pantry figures for one office and month, including burn rate, on-hand, expected date, and the next-month forecast. Use this for any number. Never invent spend, on-hand, burn rate, forecast, or dates.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "office": {
+            "type": "string"
+          },
+          "month": {
+            "type": "string",
+            "description": "YYYY-MM. Omit for the current India month."
+          }
+        },
+        "required": [
+          "office"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_activity",
+      "description": "Who changed this office's pantry, and when.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "office": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "office"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "propose_product",
+      "description": "Prepare a new pantry product. It is not saved until the person confirms.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "office": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "office",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "propose_purchase",
+      "description": "Prepare a purchase line. It is not saved until the person confirms. You cannot attach a receipt.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "office": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "packs": {
+            "type": "integer"
+          },
+          "pricePerPack": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "office",
+          "product",
+          "packs",
+          "pricePerPack"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "propose_count",
+      "description": "Prepare a shelf count. It is not saved until the person confirms.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "office": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "packs": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "office",
+          "product",
+          "packs"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "propose_delete",
+      "description": "Prepare deletion of one product, one purchase, or one shelf count. Nothing is deleted until the person says yes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "office": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "product",
+              "purchase",
+              "count"
+            ]
+          },
+          "date": {
+            "type": "string",
+            "description": "YYYY-MM-DD, when deleting one purchase or count."
+          },
+          "packs": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "office",
+          "product",
+          "target"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+]

@@ -1,0 +1,237 @@
+{
+  "sourceCommit": "275a403b659f2289ecf0e901769e145238e721e7",
+  "clock": "2026-09-20T06:30:00.000Z",
+  "issuedAt": 1790658289,
+  "admin": {
+    "id": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+    "displayName": "Avery Shah",
+    "email": "avery.shah@intuitive.AI",
+    "active": true,
+    "superAdmin": true,
+    "admin": false,
+    "seesEveryOffice": true,
+    "grants": [
+      {
+        "id": "73f24096-17a7-418d-8294-6c051c9bc4d9",
+        "role": "super_admin",
+        "officeId": null,
+        "officeName": null
+      }
+    ]
+  },
+  "password": "Node portable door 42",
+  "session": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJpbnR1aXRpdmUtcGFudHJ5IiwiYXVkIjoiaW50dWl0aXZlLXBhbnRyeSIsImlhdCI6MTc5MDY1ODI4OCwiZXhwIjoxNzkwNjU5MTg4LCJzdWIiOiI1MWJmMGM2Ny1jMmU2LTQ1YmQtOTRlNS1jOTNhNTBmMmY3NzIiLCJzaWQiOiI4NWIxODA1ZS0wMWE1LTQ5MWQtOWFiNi0wYzcwY2EzZjU0NmUiLCJjc3JmIjoiWHJTdE85Y2c5WkdFWXp2R2c1di1Oamg3WHkwMlVDeHBqUmdZLXNyb0lYcyIsInR5cCI6ImFjY2VzcyJ9.U4W4JP8uxmmKlslYzpHpSNkKdPiRG2b-x6oJAZKN4CA",
+    "refreshMaxAge": 7776000,
+    "refreshToken": "ADuTyCqmEBa6yoVu5FWplaysbqUP6a2FL44jZLrK0B4",
+    "csrf": "XrStO9cg9ZGEYzvGg5v-Njh7Xy02UCxpjRgY-sroIXs",
+    "refreshId": "85b1805e-01a5-491d-9ab6-0c70ca3f546e"
+  },
+  "setup": {
+    "next": "setup",
+    "email": "pending.member@intuitive.AI",
+    "setupToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJpbnR1aXRpdmUtcGFudHJ5IiwiYXVkIjoiaW50dWl0aXZlLXBhbnRyeSIsImlhdCI6MTc5MDY1ODI4OSwiZXhwIjoxNzkwNjU5MTg5LCJzdWIiOiI3ODY1ZmMzMC03MWFkLTQ5NzAtYmI1YS1hM2Q1NzM1MTdlODEiLCJlbWFpbCI6InBlbmRpbmcubWVtYmVyQGludHVpdGl2ZS5BSSIsImp0aSI6IjI4MjBmMWMxLTE2ZGEtNGFjYy04Mjk2LWY3MTE3YzY1NTkzZiIsInR5cCI6InNldHVwIn0.aj93GAyOZwsv2GLuOf4JcaTlW40Th_n82ClsvyjVcJM"
+  },
+  "rows": {
+    "person": [
+      {
+        "id": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "directory_object_id": "local:avery.shah@intuitive.ai",
+        "sign_in_name": "avery.shah@intuitive.AI",
+        "display_name": "Avery Shah",
+        "home_office_id": "9bbcca7d-da7e-4856-b457-00fef7793efe",
+        "active": 1,
+        "password_hash": "scrypt$32768$8$1$PoSd82Aa_KjAtpzfmAeXvQ$ZK8BOOgM-ZN53myt1_WmRNZ20nVRSBeflNttk5NF-w8",
+        "must_set_password": 0,
+        "failed_attempts": 0,
+        "locked_until": null,
+        "invited_at": "2026-09-20T06:30:00.000Z"
+      },
+      {
+        "id": "51cb80b3-7f1c-4ef2-a02a-d62ccd958a6f",
+        "directory_object_id": "local:meera.patel@intuitive.ai",
+        "sign_in_name": "meera.patel@intuitive.AI",
+        "display_name": "Meera Patel",
+        "home_office_id": "9bbcca7d-da7e-4856-b457-00fef7793efe",
+        "active": 1,
+        "password_hash": null,
+        "must_set_password": 0,
+        "failed_attempts": 0,
+        "locked_until": null,
+        "invited_at": null
+      },
+      {
+        "id": "529f2502-4a64-4cc4-80a9-f361cc2fdf3c",
+        "directory_object_id": "local:rohan.desai@intuitive.ai",
+        "sign_in_name": "rohan.desai@intuitive.AI",
+        "display_name": "Rohan Desai",
+        "home_office_id": "a8c1454d-08d5-4bf3-9167-62006d78a063",
+        "active": 1,
+        "password_hash": null,
+        "must_set_password": 0,
+        "failed_attempts": 0,
+        "locked_until": null,
+        "invited_at": null
+      },
+      {
+        "id": "0b26fe03-312b-42b2-9f6e-b9676944c608",
+        "directory_object_id": "local:isha.rao@intuitive.ai",
+        "sign_in_name": "isha.rao@intuitive.AI",
+        "display_name": "Isha Rao",
+        "home_office_id": "9bbcca7d-da7e-4856-b457-00fef7793efe",
+        "active": 1,
+        "password_hash": null,
+        "must_set_password": 0,
+        "failed_attempts": 0,
+        "locked_until": null,
+        "invited_at": null
+      },
+      {
+        "id": "13d60ec4-7aaa-4bb9-8152-4118b4d760d2",
+        "directory_object_id": "local:kabir.mehta@intuitive.ai",
+        "sign_in_name": "kabir.mehta@intuitive.AI",
+        "display_name": "Kabir Mehta",
+        "home_office_id": "9bbcca7d-da7e-4856-b457-00fef7793efe",
+        "active": 1,
+        "password_hash": null,
+        "must_set_password": 0,
+        "failed_attempts": 0,
+        "locked_until": null,
+        "invited_at": null
+      },
+      {
+        "id": "7865fc30-71ad-4970-bb5a-a3d573517e81",
+        "directory_object_id": null,
+        "sign_in_name": "pending.member@intuitive.AI",
+        "display_name": "Pending Member",
+        "home_office_id": null,
+        "active": 1,
+        "password_hash": "scrypt$32768$8$1$nfFUwBJlP4HHVEGPThDCrQ$gCH63i8OtaZgg3sWSfYhSahuDNEZJZBwyqyh8al-n8c",
+        "must_set_password": 1,
+        "failed_attempts": 0,
+        "locked_until": null,
+        "invited_at": "2026-09-20T06:30:00.000Z"
+      }
+    ],
+    "office": [
+      {
+        "id": "9bbcca7d-da7e-4856-b457-00fef7793efe",
+        "name": "Ahmedabad",
+        "created_by": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "created_at": "2026-07-01T04:30:00.000Z"
+      },
+      {
+        "id": "a8c1454d-08d5-4bf3-9167-62006d78a063",
+        "name": "Pune",
+        "created_by": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "created_at": "2026-07-01T04:30:00.000Z"
+      }
+    ],
+    "role_grant": [
+      {
+        "id": "73f24096-17a7-418d-8294-6c051c9bc4d9",
+        "person_id": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "role": "super_admin",
+        "office_id": null,
+        "created_by": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "created_at": "2026-07-01T04:30:00.000Z",
+        "deleted_by": null,
+        "deleted_at": null
+      },
+      {
+        "id": "c69d016e-8071-469b-a91b-a181ff0fe0ef",
+        "person_id": "51cb80b3-7f1c-4ef2-a02a-d62ccd958a6f",
+        "role": "office_manager",
+        "office_id": "9bbcca7d-da7e-4856-b457-00fef7793efe",
+        "created_by": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "created_at": "2026-07-01T04:30:00.000Z",
+        "deleted_by": null,
+        "deleted_at": null
+      },
+      {
+        "id": "5cb1cc00-28e0-4e2e-b5a1-28535de04180",
+        "person_id": "529f2502-4a64-4cc4-80a9-f361cc2fdf3c",
+        "role": "office_manager",
+        "office_id": "a8c1454d-08d5-4bf3-9167-62006d78a063",
+        "created_by": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "created_at": "2026-07-01T04:30:00.000Z",
+        "deleted_by": null,
+        "deleted_at": null
+      },
+      {
+        "id": "dcc72d41-b3b3-4ced-a25c-65cf3c487535",
+        "person_id": "0b26fe03-312b-42b2-9f6e-b9676944c608",
+        "role": "admin",
+        "office_id": "9bbcca7d-da7e-4856-b457-00fef7793efe",
+        "created_by": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "created_at": "2026-07-01T04:30:00.000Z",
+        "deleted_by": null,
+        "deleted_at": null
+      },
+      {
+        "id": "bc0976b1-6a47-420f-ab9a-6d2d66fe9436",
+        "person_id": "13d60ec4-7aaa-4bb9-8152-4118b4d760d2",
+        "role": "accounts",
+        "office_id": "9bbcca7d-da7e-4856-b457-00fef7793efe",
+        "created_by": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "created_at": "2026-07-01T04:30:00.000Z",
+        "deleted_by": null,
+        "deleted_at": null
+      },
+      {
+        "id": "2a30bbc1-832c-4d92-bd1c-da0168acd428",
+        "person_id": "13d60ec4-7aaa-4bb9-8152-4118b4d760d2",
+        "role": "accounts",
+        "office_id": "a8c1454d-08d5-4bf3-9167-62006d78a063",
+        "created_by": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "created_at": "2026-07-01T04:30:00.000Z",
+        "deleted_by": null,
+        "deleted_at": null
+      }
+    ],
+    "company_setting": [
+      {
+        "id": 1,
+        "weekend_weight": 0.2,
+        "lookback_months": 3
+      }
+    ],
+    "session": [],
+    "refresh_token": [
+      {
+        "id": "b5b45753-1a95-4136-a83f-2cc4b0264fd3",
+        "person_id": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "token_hash": "372994697c42c80f12a4f6ac4b70f15da177e9d3de6a51b6cbae98e1c67a2541",
+        "family_id": "bc48f4e5-e746-459b-8eea-3918ff270485",
+        "csrf_token": "0hEYJG483wehDKTm6F-oAkzB696bIZRPjBsYLmS0dWA",
+        "graph_refresh": null,
+        "expires_at": "2026-12-19T06:30:00.000Z",
+        "absolute_expires_at": "2027-03-19T06:30:00.000Z",
+        "created_at": "2026-09-20T06:30:00.000Z",
+        "revoked_at": null,
+        "replaced_by": null
+      },
+      {
+        "id": "85b1805e-01a5-491d-9ab6-0c70ca3f546e",
+        "person_id": "51bf0c67-c2e6-45bd-94e5-c93a50f2f772",
+        "token_hash": "1449c54f2d01a4b2732eb60fbe271d884032e97402d4052929fb5ace3114c35f",
+        "family_id": "8ae6b69a-f3eb-4c06-ad01-1d8f9bd0775d",
+        "csrf_token": "XrStO9cg9ZGEYzvGg5v-Njh7Xy02UCxpjRgY-sroIXs",
+        "graph_refresh": "dvjAvlBXo3kJe5s0WvnP7vsf1xLtQSpVaGNt3igmB72v9-7xLeWEWo6dRW6fpJjdsUc",
+        "expires_at": "2026-12-19T06:30:00.000Z",
+        "absolute_expires_at": "2027-03-19T06:30:00.000Z",
+        "created_at": "2026-09-20T06:30:00.000Z",
+        "revoked_at": null,
+        "replaced_by": null
+      }
+    ],
+    "setup_ticket": [
+      {
+        "jti_hash": "6803a1fb2cc7cc93b8a6ab5d2eb2544fefcde0aa75b67f095ea5c390a2c011d0",
+        "person_id": "7865fc30-71ad-4970-bb5a-a3d573517e81",
+        "expires_at": "2026-09-20T06:45:00.000Z",
+        "used_at": null
+      }
+    ]
+  }
+}

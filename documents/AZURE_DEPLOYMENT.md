@@ -6,7 +6,7 @@ This is a first-deployment runbook for the approved managed App Service + Postgr
 
 | Part of this app | Azure service | Initial sizing / purpose |
 | --- | --- | --- |
-| React website and Express API together | App Service, Linux, Node.js 24 LTS | One Basic B1 instance as an initial sizing hypothesis for 10–20 people. Enable Always On. Measure before changing size. |
+| React website and FastAPI together | App Service, Linux, Python 3.12 | One Basic B1 instance as an initial sizing hypothesis for 10–20 people. Enable Always On. Measure before changing size. |
 | Users, roles, sessions, pantry, chat and activity | Azure Database for PostgreSQL Flexible Server | Smallest available General Purpose size in the chosen region, typically 2 vCores; start with minimum supported storage and storage-growth alerts. |
 | Receipt files | Storage account, general-purpose v2, Blob Storage | Standard storage, private `receipts` container, managed-identity access. LRS is the lower-cost baseline; choose ZRS if zone resilience is required and supported. |
 | App secrets | Key Vault | Session-signing secret, database connection URL, Entra client secret; optional AI key. |
@@ -35,14 +35,14 @@ Use MFA on Azure administrator accounts. Keep application users separate from Az
 
 In Azure Portal, create **Web App**:
 
-- Publish: Code. OS: Linux. Runtime: Node 24 LTS. Select the agreed region and a B1 App Service plan, one instance.
+- Publish: Code. OS: Linux. Runtime: Python 3.12. Select the agreed region and a B1 App Service plan, one instance.
 - Record its actual default HTTPS hostname. It may include an automatically generated suffix; copy it from Overview rather than guessing it.
 - Under Identity, enable **System assigned** and save. Record its principal/object ID for later role assignments.
 - Under configuration/general settings: Always On enabled, HTTPS Only enabled, minimum TLS at least 1.2 (1.3 where supported), remote debugging off, FTP off, SCM and FTP basic publishing authentication off.
-- Use a single-process startup command: `pm2 start server/index.js --name pantry --no-daemon`. Do not enable PM2 cluster mode or several instances at this stage. The app listens on Azure's supplied `PORT` and binds appropriately; do not set the local `PANTRY_HOST=127.0.0.1` in Azure.
+- Use a single-process startup command: `bash startup.sh`. Do not enable multiple Uvicorn workers or several instances at this stage. The startup script defaults to port 8000, and the app binds to all interfaces on App Service; do not set the local `PANTRY_HOST=127.0.0.1` in Azure.
 - Leave App Service Authentication / Easy Auth unconfigured: this application already implements Microsoft and password sign-in. Requiring Microsoft's platform login in front would remove the independent password option you asked to keep.
 
-App Service supports Node 24 and uses `PORT`; the Linux image includes PM2. Check the actual runtime after deployment. [Node hosting configuration](https://learn.microsoft.com/en-us/azure/app-service/configure-language-nodejs).
+Confirm Python 3.12 is available in the selected App Service environment and verify the deployed runtime. A custom startup command is required for this FastAPI app. [Python hosting configuration](https://learn.microsoft.com/en-us/azure/app-service/configure-language-python).
 
 In **Microsoft Entra ID → App registrations → New registration**:
 
@@ -101,7 +101,7 @@ Open App Service → Environment variables / Application settings and copy the k
 
 | Setting | Value |
 | --- | --- |
-| `NODE_ENV` | `production` |
+| `APP_ENV` | `production` (`NODE_ENV=production` also enables production guardrails) |
 | `APP_ORIGIN` | Exact canonical HTTPS origin, no path or trailing slash |
 | `ENTRA_REDIRECT_URI` | Same origin plus `/api/auth/callback` |
 | `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | IDs from app registration |
@@ -121,31 +121,19 @@ The local `.github/workflows/checks.yml` runs tests/build/browser checks and a p
 
 For a first deployment, use App Service **Deployment Center → GitHub → GitHub Actions**, after deciding which private repository/branch to connect. Choose OpenID Connect / managed identity, not a long-lived publish profile. Creating this connection can commit a generated workflow to your repository: review it before enabling automatic production deployment. Protect production with a GitHub environment approval. Limit the deployment identity to the web app's required deployment role, not subscription Owner. [Microsoft deployment instructions](https://learn.microsoft.com/en-us/azure/app-service/deploy-github-actions).
 
-Adjust the generated build job to use Linux + Node 24 and fail unless these pass, **before any Azure deploy step**:
+The repository's checks workflow already installs Python 3.12 and Node 24, starts disposable PostgreSQL 16, builds the frontend, runs the complete Python and browser suites, audits dependencies, and uploads `pantry-python-release`. The workflow has read-only repository permission and contains no cloud credentials. Any future deployment job must depend on these checks and consume the tested artifact.
+
+For manual preparation, run the complete [README verification commands](../README.md#verify-changes), then:
 
 ```sh
-npm ci
-npm test
-npm run build
-npx playwright install --with-deps chromium
-npm run test:browser
-npm audit --omit=dev --audit-level=high
+python scripts/package_release.py
 ```
 
-Package only runtime code, built client and Linux runtime dependencies. After tests, a Linux CI job can stage a clean package like this (run in the repository root, in the disposable CI checkout):
+Run that with the project's Python environment active. The script stages an allowlisted `release/` and refuses to overwrite a nonempty destination. Its contents are `backend/pantry/`, `frontend/dist/`, root `requirements.txt` and `startup.sh`. It excludes local data, secrets, virtual environments, Node dependencies and tests. Node is needed only to build/test the frontend.
 
-```sh
-npm prune --omit=dev
-mkdir -p release/server release/client
-cp package.json package-lock.json release/
-for file in calc chat config database entra http identity index migration passwords receipts secret service; do
-  cp "server/$file.js" release/server/
-done
-cp -R client/dist release/client/
-cp -R node_modules release/
-```
+Deploy the **contents of `release/`**, using the generated `azure/webapps-deploy` step's `package: release`. Set **`SCM_DO_BUILD_DURING_DEPLOYMENT=true`** so Oryx installs the pinned root `requirements.txt` on Linux, and set startup command **`bash startup.sh`**. Do not upload a macOS virtual environment. Oryx installs dependencies during deployment and activates the runtime environment; this package intentionally does not ship a preinstalled environment. [Python build automation](https://learn.microsoft.com/en-us/azure/app-service/configure-language-python#customize-build-automation).
 
-Deploy the **contents of `release/`** using the generated `azure/webapps-deploy` step's `package: release`. The deployed root must contain `package.json`, `server/`, `client/dist/`, and `node_modules/`, not another enclosing `accounts-agent/` or `release/` directory. Use `SCM_DO_BUILD_DURING_DEPLOYMENT=false` for this prebuilt package. Do not prune dependencies in your everyday development checkout; the example is for CI only. Do not upload macOS `node_modules`, `.env`, receipts, SQLite files, tests or the BRD.
+When replacing an existing Node deployment, change the App Service runtime to Python 3.12 and replace the PM2 startup command. Preserve the database URL, private receipt container and `SESSION_SECRET`. The database schema, password hashes, JWTs and refresh families are compatible, so a backend replacement using the **same database** does not intentionally log people out. SQLite-to-PostgreSQL migration is a separate operation below, which deliberately excludes sessions. Never run both backends as writers during cutover.
 
 If importing existing data, complete step 7 into an empty database **before the first app startup seeds it**. Keep the web app stopped until migration has finished. For a brand-new empty pantry, skip migration and let the first startup initialize the schema and the configured administrator. Releasing new code must never overwrite a data directory because persistent production data lives in PostgreSQL and Blob.
 
@@ -159,7 +147,7 @@ This migration is not automatic. Rehearse on a copy and compare totals before sc
 2. In a private administration environment with this repository, Node 24 and dependencies, check the source without connecting to a target:
 
 ```sh
-node scripts/migrate-to-postgres.mjs /absolute/backup/pantry.sqlite /absolute/backup/receipts
+PYTHONPATH=backend python -m pantry.migration /absolute/backup/pantry.sqlite /absolute/backup/receipts
 ```
 
 3. This checks integrity, required tables and receipt existence/size, and reports counts only. Demo fixture identities are refused. A source with an older/incompatible schema must be reviewed/upgraded on a copy, not “fixed” by altering the live original.
@@ -168,7 +156,7 @@ node scripts/migrate-to-postgres.mjs /absolute/backup/pantry.sqlite /absolute/ba
 6. Execute against the reviewed backup:
 
 ```sh
-node scripts/migrate-to-postgres.mjs /absolute/backup/pantry.sqlite /absolute/backup/receipts --execute
+PYTHONPATH=backend python -m pantry.migration /absolute/backup/pantry.sqlite /absolute/backup/receipts --execute
 ```
 
 7. The tool uploads immutable/checksummed receipt objects, inserts metadata in a transaction and verifies table row counts. It preserves password hashes, people, grants and business data. It does **not** transfer active sessions, password-setup tickets, login attempts or pending chat confirmations: everyone signs in afresh. Existing invitations still obey their original seven-day expiry.
@@ -203,4 +191,4 @@ For an ordinary faulty code release, redeploy the previous known-good applicatio
 
 When somebody leaves or a device is lost, a Super Admin must **disable the person in this app immediately**. This revokes every app session and setup ticket. Disabling only their Entra account does not invalidate local passwords or these app-owned long sessions. Keep a compromised account disabled until its password and identity are safely recovered. Local password change/reset is on the owner's future-work list, not implemented in this release; Microsoft login is the current alternative for a forgotten local password.
 
-Maintain two trusted active Super Admins. Keep dependency checks and Node 24 patches current, review grants periodically, and rehearse recovery after major infrastructure changes. Before adding app instances or PM2 workers, replace per-process abuse limits with shared/upstream limits and load-test database contention. Do not add Redis or more instances preemptively for a 10–20-user pantry.
+Maintain two trusted active Super Admins. Keep dependency checks, Python 3.12 runtime patches and Node 24 build-tool patches current, review grants periodically, and rehearse recovery after major infrastructure changes. Before adding app instances or Uvicorn workers, replace per-process abuse limits with shared/upstream limits and load-test database contention. Do not add Redis or more instances preemptively for a 10–20-user pantry.
