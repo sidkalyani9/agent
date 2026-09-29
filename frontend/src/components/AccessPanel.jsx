@@ -16,7 +16,7 @@ const EMPTY = {
   officeId: "",
 };
 
-export function AccessPanel({ offices }) {
+export function AccessPanel({ offices, onToast }) {
   const [people, setPeople] = useState([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
@@ -27,6 +27,7 @@ export function AccessPanel({ offices }) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [issued, setIssued] = useState(null);
+  const [pending, setPending] = useState(null);
 
   async function load() {
     const data = await api("/api/access");
@@ -56,7 +57,7 @@ export function AccessPanel({ offices }) {
       const data = await api(`/api/directory/users?query=${encodeURIComponent(query.trim())}`);
       setResults(data.people);
     } catch (err) {
-      setResults([]);
+      setResults(null);
       setError(err.message);
     } finally {
       setBusy(false);
@@ -82,31 +83,12 @@ export function AccessPanel({ offices }) {
       });
       setForm(EMPTY);
       setNotice("Access saved.");
+      onToast?.("Access saved.");
       await load();
     } catch (err) {
       setError(err.message);
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function removeGrant(personId, grantId) {
-    setError("");
-    try {
-      await api(`/api/access/${personId}/grants/${grantId}`, { method: "DELETE" });
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function setActive(personId, active) {
-    setError("");
-    try {
-      await api(`/api/access/${personId}/active`, { method: "POST", body: { active } });
-      await load();
-    } catch (err) {
-      setError(err.message);
     }
   }
 
@@ -137,7 +119,29 @@ export function AccessPanel({ offices }) {
       await navigator.clipboard.writeText(issued.temporaryPassword);
       setNotice("Invite password copied.");
     } catch {
-      setNotice("Select the invite password and copy it.");
+      setNotice("");
+      setError("Select the invite password and copy it.");
+    }
+  }
+
+  async function confirmPending() {
+    if (!pending) return;
+    setError("");
+    setBusy(true);
+    try {
+      if (pending.kind === "grant") {
+        await api(`/api/access/${pending.personId}/grants/${pending.grantId}`, { method: "DELETE" });
+        onToast?.("Role removed.");
+      } else {
+        await api(`/api/access/${pending.personId}/active`, { method: "POST", body: { active: pending.active } });
+        onToast?.(pending.active ? "Account turned on." : "Account turned off.");
+      }
+      setPending(null);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -242,14 +246,40 @@ export function AccessPanel({ offices }) {
             </div>
             <div className="access-actions">
               {person.grants.map((grant) => (
-                <button key={grant.id} className="texty" type="button" onClick={() => removeGrant(person.id, grant.id)}>
+                <button
+                  key={grant.id}
+                  className="texty"
+                  type="button"
+                  onClick={() => setPending({ kind: "grant", personId: person.id, grantId: grant.id, label: grant.label })}
+                >
                   Remove {grant.label}
                 </button>
               ))}
-              <button className="texty" type="button" onClick={() => setActive(person.id, !person.active)}>
+              <button
+                className="texty"
+                type="button"
+                onClick={() => setPending({ kind: "active", personId: person.id, active: !person.active, label: person.displayName })}
+              >
                 {person.active ? "Turn off" : "Turn on"}
               </button>
             </div>
+            {pending?.personId === person.id ? (
+              <div className="confirm-card">
+                <p>
+                  {pending.kind === "grant"
+                    ? `Remove ${pending.label} from this person?`
+                    : pending.active
+                      ? `Turn ${pending.label} on?`
+                      : `Turn ${pending.label} off? This signs them out.`}
+                </p>
+                <div className="row-actions">
+                  <button className="solid" type="button" disabled={busy} onClick={confirmPending}>
+                    {pending.kind === "grant" ? "Remove this role" : pending.active ? "Turn on now" : "Turn off now"}
+                  </button>
+                  <button className="ghost" type="button" onClick={() => setPending(null)}>Keep</button>
+                </div>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>

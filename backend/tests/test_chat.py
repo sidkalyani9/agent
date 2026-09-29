@@ -127,3 +127,14 @@ async def test_streaming_provider_tool_fragments_and_http_failure(monkeypatch):
     monkeypatch.setattr(chat.httpx, "AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(lambda _: httpx.Response(503, json={"private": "upstream secret"})), **kwargs))
     with fails(502, "could not reply"):
         await chat.complete([], False, None)
+
+
+async def test_open_screen_is_only_a_fallback_for_the_office(db, people, offices):
+    admin = people["admin"]
+    assert await chat.factual_reply(db, admin, "how much coffee is left") == "Which office should I use?"
+    fallback = await chat.factual_reply(db, admin, "how much coffee is left", context_office_id=offices["Ahmedabad"])
+    assert "Ahmedabad" in fallback and "Which office" not in fallback
+    named = await chat.factual_reply(db, admin, "how much coffee is left at Pune", context_office_id=offices["Ahmedabad"])
+    assert "Pune" in named and "Ahmedabad" not in named
+    spent = await chat.factual_reply(db, admin, "how much was spent on coffee", context_office_id=offices["Ahmedabad"], context_month="2026-09")
+    assert "September 2026" in spent

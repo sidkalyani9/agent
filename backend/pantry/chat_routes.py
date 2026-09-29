@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from contextlib import suppress
 from fastapi import APIRouter, Depends, Request
 from starlette.responses import JSONResponse, StreamingResponse
@@ -30,6 +31,16 @@ async def get_thread(request: Request, thread_id: str):
     return await c.get_chat_thread(db, actor, thread_id)
 
 
+def screen_context(body):
+    office_id = text(body.get("officeId") or "").strip()
+    month = text(body.get("month") or "").strip()
+    if office_id in ("", "all"):
+        office_id = None
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        month = None
+    return office_id, month
+
+
 def error_payload(error, thread_id):
     status = error.status if isinstance(error, HttpError) else 500
     if status == 500:
@@ -47,6 +58,7 @@ async def converse(request: Request):
         raise HttpError(422, "Keep a message under 2000 characters.")
     thread_id = body.get("threadId") or (await c.create_chat_thread(db, actor))["id"]
     history = await c.recent_chat_history(db, actor, thread_id)
+    office_id, month = screen_context(body)
     await c.add_chat_message(db, actor, thread_id, "user", message)
     if body.get("stream") is True:
         async def events():
@@ -57,7 +69,8 @@ async def converse(request: Request):
                 try:
                     result = await chat.converse(db, actor, history, message, thread_id=thread_id,
                                                  on_delta=lambda piece: send("delta", {"text": piece}),
-                                                 on_replace=lambda full: send("replace", {"text": full}))
+                                                 on_replace=lambda full: send("replace", {"text": full}),
+                                                 context_office_id=office_id, context_month=month)
                     await c.add_chat_message(db, actor, thread_id, "assistant", result["reply"], result.get("proposals") or [])
                     send("done", {"threadId": thread_id, "reply": result["reply"], "proposals": result.get("proposals") or [], "saved": bool(result.get("saved"))})
                 except Exception as error:
@@ -77,7 +90,7 @@ async def converse(request: Request):
                     await task
         return StreamingResponse(events(), media_type="text/event-stream; charset=utf-8", headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
     try:
-        result = await chat.converse(db, actor, history, message, thread_id=thread_id)
+        result = await chat.converse(db, actor, history, message, thread_id=thread_id, context_office_id=office_id, context_month=month)
         await c.add_chat_message(db, actor, thread_id, "assistant", result["reply"], result.get("proposals") or [])
         return {**result, "threadId": thread_id}
     except Exception as error:

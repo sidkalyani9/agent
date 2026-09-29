@@ -1,23 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { api, streamChat } from "../api.js";
+import { useFocusTrap } from "../focus.js";
 import { IconAssistant, IconBack, IconChats, IconClose, IconPlus, IconSend } from "../icons.jsx";
 
 const READY = "Ask what an office spent, or tell me to add or delete a pantry item. I will ask you to confirm before anything is saved or deleted.";
 const MISSING = "The assistant is not switched on yet. Recording on the pantry screen still works.";
 
-export function ChatDock({ configured, onSaved }) {
+export function ChatDock({ configured, onSaved, officeId = "", officeName = "", month = "" }) {
   const [open, setOpen] = useState(false);
   const [pane, setPane] = useState("thread");
   const [threads, setThreads] = useState([]);
-  const [threadId, setThreadId] = useState("");
   const threadIdRef = useRef("");
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const threadRef = useRef(null);
+  const inputRef = useRef(null);
   const chatEpoch = useRef(0);
+  const abortRef = useRef(null);
+  const wasOpen = useRef(false);
+  const trap = useFocusTrap(open, () => setOpen(false));
   const greeting = configured ? READY : MISSING;
 
   async function loadThreads() {
@@ -29,7 +33,6 @@ export function ChatDock({ configured, onSaved }) {
   function remember(id) {
     if (!id) return;
     threadIdRef.current = id;
-    setThreadId(id);
   }
 
   async function openThread(id) {
@@ -38,6 +41,15 @@ export function ChatDock({ configured, onSaved }) {
     setMessages(data.messages.length ? data.messages : [{ role: "assistant", content: greeting }]);
     setPane("thread");
   }
+
+  useEffect(() => {
+    if (wasOpen.current && !open) {
+      chatEpoch.current += 1;
+      abortRef.current?.abort();
+      setBusy(false);
+    }
+    wasOpen.current = open;
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -70,20 +82,33 @@ export function ChatDock({ configured, onSaved }) {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [messages, busy, open, pane]);
 
+  useEffect(() => {
+    if (open && pane === "thread") inputRef.current?.focus();
+  }, [open, pane]);
+
   function startNew() {
-    setError("");
+    abortRef.current?.abort();
     chatEpoch.current += 1;
+    setBusy(false);
+    setError("");
     threadIdRef.current = "";
-    setThreadId("");
     setText("");
     setMessages([{ role: "assistant", content: greeting }]);
     setPane("thread");
+  }
+
+  function stop() {
+    abortRef.current?.abort();
+    setBusy(false);
   }
 
   async function send(event) {
     event.preventDefault();
     const message = text.trim();
     if (!message || busy) return;
+    const epoch = chatEpoch.current;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setMessages((current) => {
       const kept = current.length === 1 && current[0].content === greeting ? [] : current;
       return [...kept, { role: "user", content: message }];
@@ -92,7 +117,13 @@ export function ChatDock({ configured, onSaved }) {
     setBusy(true);
     setError("");
     try {
-      await streamChat({ message, threadId: threadIdRef.current || undefined }, (eventName, data) => {
+      await streamChat({
+        message,
+        threadId: threadIdRef.current || undefined,
+        officeId: officeId || undefined,
+        month: month || undefined,
+      }, (eventName, data) => {
+        if (epoch !== chatEpoch.current) return;
         if (eventName === "thread") remember(data.threadId);
         if (eventName === "delta") {
           flushSync(() => {
@@ -135,18 +166,21 @@ export function ChatDock({ configured, onSaved }) {
         }
         if (eventName === "error") {
           remember(data.threadId);
-          const error = new Error(data.error || "The assistant could not reply.");
-          error.threadId = data.threadId || "";
-          throw error;
+          const failure = new Error(data.error || "The assistant could not reply.");
+          failure.threadId = data.threadId || "";
+          throw failure;
         }
-      });
-      loadThreads().catch(() => {});
+      }, false, controller.signal);
+      if (epoch === chatEpoch.current) loadThreads().catch(() => {});
     } catch (err) {
+      if (epoch !== chatEpoch.current || err?.name === "AbortError") return;
       remember(err.threadId);
       setError(err.message);
     } finally {
-      setBusy(false);
-      setMessages((current) => current.map((item) => (item.streaming ? { ...item, streaming: false } : item)));
+      if (epoch === chatEpoch.current) {
+        setBusy(false);
+        setMessages((current) => current.map((item) => (item.streaming ? { ...item, streaming: false } : item)));
+      }
     }
   }
 
@@ -170,18 +204,25 @@ export function ChatDock({ configured, onSaved }) {
   }
 
   async function dismiss(proposalId) {
-    await api("/api/chat/dismiss", { method: "POST", body: { proposalId } }).catch(() => {});
-    setMessages((current) =>
-      current.map((item) =>
-        item.proposals ? { ...item, proposals: item.proposals.filter((proposal) => proposal.id !== proposalId) } : item,
-      ),
-    );
+    setError("");
+    try {
+      await api("/api/chat/dismiss", { method: "POST", body: { proposalId } });
+      setMessages((current) =>
+        current.map((item) =>
+          item.proposals ? { ...item, proposals: item.proposals.filter((proposal) => proposal.id !== proposalId) } : item,
+        ),
+      );
+    } catch (err) {
+      setError(err.message);
+    }
   }
+
+  const lastIndex = messages.length - 1;
 
   return (
     <div className={`dock${open ? " open" : ""}`}>
       {open ? (
-        <aside className="card chat" role="dialog" aria-label="Assistant">
+        <aside className="card chat" role="dialog" aria-label="Assistant" ref={trap} tabIndex={-1}>
           <header>
             <div className="card-head">
               {pane === "history" ? (
@@ -210,13 +251,17 @@ export function ChatDock({ configured, onSaved }) {
               )) : <p className="muted">No chats yet.</p>}
             </div>
           ) : (
-            <div className="thread" ref={threadRef} aria-live="polite">
+            <div className="thread" ref={threadRef}>
               {messages.map((item, index) => (
-                <div key={item.id || index} className={`bubble ${item.role}${item.streaming ? " streaming" : ""}`}>
+                <div
+                  key={item.id || index}
+                  className={`bubble ${item.role}${item.streaming ? " streaming" : ""}`}
+                  aria-live={index === lastIndex && !item.streaming ? "polite" : undefined}
+                >
                   {item.content}
                   {(item.proposals || []).map((proposal) => (
                     <div className="proposal" key={proposal.id}>
-                      <p>{proposal.summary}</p>
+                      <p>{String(proposal.action || "").startsWith("delete_") ? `This will be deleted. ${proposal.summary}` : proposal.summary}</p>
                       <div className="row-actions">
                         <button className="solid" type="button" disabled={busy} onClick={() => confirm(proposal.id)}>Confirm</button>
                         <button className="ghost" type="button" disabled={busy} onClick={() => dismiss(proposal.id)}>Leave unsaved</button>
@@ -226,15 +271,16 @@ export function ChatDock({ configured, onSaved }) {
                 </div>
               ))}
               {busy && !messages.some((item) => item.streaming && item.content) ? <p className="muted">Working…</p> : null}
-              {error ? <p className="error">{error}</p> : null}
             </div>
           )}
+          {error ? <p className="error chat-error" role="alert">{error}</p> : null}
           {pane === "thread" ? (
             <form onSubmit={send}>
               <textarea
+                ref={inputRef}
                 aria-label="Message the assistant"
                 value={text}
-                placeholder="What did Ahmedabad spend on coffee?"
+                placeholder={officeName ? `What did ${officeName} spend on coffee?` : "What did Ahmedabad spend on coffee?"}
                 onChange={(event) => setText(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
@@ -243,7 +289,11 @@ export function ChatDock({ configured, onSaved }) {
                   }
                 }}
               />
-              <button className="solid icon-button send" type="submit" aria-label="Send" disabled={busy}><IconSend /></button>
+              {busy ? (
+                <button className="ghost send" type="button" onClick={stop}>Stop</button>
+              ) : (
+                <button className="solid icon-button send" type="submit" aria-label="Send"><IconSend /></button>
+              )}
             </form>
           ) : null}
         </aside>

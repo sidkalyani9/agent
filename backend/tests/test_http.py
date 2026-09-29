@@ -81,6 +81,13 @@ async def test_full_inventory_routes(api, offices):
     assert any(p["purchaseId"] == purchase and p["receiptName"] == "receipt.pdf" for p in listed.json()["purchases"])
     assert (await api(f"/api/purchases/{purchase}/receipt", actor="manager", method="PUT", body={"receipt": {**receipt, "fileName": "replacement.pdf"}})).json()["receiptSaved"]
     assert (await api(f"/api/purchases/{purchase}", actor="manager", method="PUT", body={"packs": 3})).status_code == 200
+    spare = await api(f"/api/offices/{office}/purchases", actor="manager", method="POST", body={"productId": product, "date": "2026-09-19", "packs": 1, "pricePerPack": "4.00"}, headers={"Idempotency-Key": "http-delete-key-001"})
+    assert spare.status_code == 201
+    spare_id = spare.json()["purchaseId"]
+    assert (await api(f"/api/purchases/{spare_id}/delete", actor="reader", method="POST", body={})).status_code == 403
+    removed = await api(f"/api/purchases/{spare_id}/delete", actor="manager", method="POST", body={})
+    assert removed.status_code == 200 and removed.json()["deleted"] is True
+    assert (await api(f"/api/purchases/{spare_id}/delete", actor="manager", method="POST", body={})).status_code == 404
     count = (await api(f"/api/offices/{office}/counts", actor="manager", method="PUT", body={"productId": product, "date": "2026-09-20", "packs": 3})).json()["countId"]
     assert (await api(f"/api/counts/{count}/hide", actor="manager", method="POST", body={})).json()["hidden"]
     assert (await api(f"/api/purchases/{purchase}/hide", actor="manager", method="POST", body={})).json()["hidden"]

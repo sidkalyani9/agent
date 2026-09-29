@@ -44,7 +44,7 @@ export function PantryCharts({ pantry, range, onRange }) {
       <div className="chart-split">
         <article className="card">
           <h2>Packs behind the burn</h2>
-          <MonthColumns history={history.length ? history : selected.history} today={pantry.today} />
+          <MonthColumns history={history} today={pantry.today} />
         </article>
         <article className="card">
           <div className="card-head">
@@ -122,8 +122,12 @@ function RunwayCopy({ product }) {
 }
 
 function Runway({ product, today, range }) {
-  const points = (product.series || []).filter((point) => inRange(point.date, range));
+  const series = product.series || [];
+  const points = series.filter((point) => inRange(point.date, range));
   const [hover, setHover] = useState(null);
+  if (!points.length && series.length) {
+    return <p className="chart-empty">Nothing in these dates.</p>;
+  }
   if (points.length < 2) {
     return <p className="chart-empty">The line appears once two calendar months of purchases are on record.</p>;
   }
@@ -246,17 +250,19 @@ function Runway({ product, today, range }) {
 }
 
 function MonthColumns({ history, today }) {
-  const width = 360;
+  if (!history.length) return <p className="chart-empty">Nothing in these dates.</p>;
   const height = 220;
   const padB = 52;
   const padT = 22;
   const innerH = height - padB - padT;
   const gap = 16;
-  const barW = (width - 16 - gap * (history.length - 1)) / Math.max(history.length, 1);
+  const barW = 36;
+  const width = 16 + history.length * barW + gap * (history.length - 1);
   const max = Math.max(1, ...history.map((month) => month.packs));
   const label = history.map((month) => `${shortMonth(month.month)} ${month.packs} packs`).join(", ");
   return (
-    <svg className="chart-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Packs bought: ${label}`}>
+    <div className="column-scroll">
+    <svg className="chart-svg" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Packs bought: ${label}`}>
       {history.map((month, index) => {
         const barH = Math.max((month.packs / max) * innerH, month.packs ? 4 : 2);
         const x = 8 + index * (barW + gap);
@@ -276,6 +282,7 @@ function MonthColumns({ history, today }) {
         );
       })}
     </svg>
+    </div>
   );
 }
 

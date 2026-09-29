@@ -134,7 +134,7 @@ async def get_pantry(db, person, office_id, month=None, *, series=True):
         month_stats, basis = calc.month_figures(purchases, selected), calc.month_figures(purchases, today[:7])
         forecast = calc.project_month(purchases=purchases, math=math_result, settings=config, today=today, basisPacks=basis["packsAdded"], basisSpend=basis["spend"])
         receipt = await db.get("SELECT purchase_id FROM pantry_receipt r JOIN pantry_purchase p ON p.id = r.purchase_id WHERE p.product_id = ? AND r.deleted_at IS NULL LIMIT 1", product["id"])
-        row = {"productId": product["id"], "name": product["name"], "deletedAt": product["deleted_at"], "createdBy": names.get(product["created_by"], "Unknown"), "createdAt": product["created_at"], "createdAtLabel": calc.format_when(product["created_at"]), **math_result, **month_stats, "history": calc.month_history(purchases, config, today), "forecast": forecast, "hasReceipt": bool(receipt)}
+        row = {"productId": product["id"], "name": product["name"], "deletedAt": product["deleted_at"], "createdBy": names.get(product["created_by"], "Unknown"), "createdAt": product["created_at"], "createdAtLabel": calc.format_when(product["created_at"]), **math_result, **month_stats, "history": calc.month_history(purchases, config, today), "forecast": forecast, "hasReceipt": bool(receipt), "countDates": sorted({c["countedOn"] for c in counts if not c.get("deletedAt")})}
         if series:
             row["series"] = calc.stock_series(purchases=purchases, counts=counts, settings=config, today=today, burnRate=math_result["burnRatePerEffectiveDay"], expectedDate=math_result["expectedDate"], onHand=math_result["onHand"])
         products.append(row)

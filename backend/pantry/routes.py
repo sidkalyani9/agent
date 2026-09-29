@@ -203,6 +203,12 @@ async def hide_purchase(request: Request, purchase_id: str):
     return await i.hide_purchase(db, actor, purchase_id)
 
 
+@router.post("/api/purchases/{purchase_id}/delete")
+async def delete_purchase(request: Request, purchase_id: str):
+    db, actor, _ = context(request)
+    return await i.delete_purchase(db, actor, purchase_id)
+
+
 @router.put("/api/offices/{office_id}/counts")
 async def count(request: Request, office_id: str):
     db, actor, body = context(request)

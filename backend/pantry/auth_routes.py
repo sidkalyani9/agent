@@ -91,9 +91,10 @@ async def password(request: Request):
 
 @router.get("/api/auth/password/setup")
 async def setup_context(request: Request):
-    context = await a.setup_context(request.app.state.db, read_cookies(request).get("aim_setup", ""))
+    token = read_cookies(request).get("aim_setup", "")
+    context = await a.setup_context(request.app.state.db, token) if token else None
     if not context:
-        raise HttpError(401, "Sign in with the invite password first.")
+        raise HttpError(401, "That setup step expired. Sign in with the invite password again." if token else "Sign in with the invite password first.")
     return context
 
 

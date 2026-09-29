@@ -39,21 +39,41 @@ def chat_configured():
     return bool(api_key())
 
 
-async def system_prompt(db, person):
+async def system_prompt(db, person, context_office_name=None, context_month=None):
     snap = await c.snapshot_for_chat(db, person)
     prompt = PROMPT.replace("${person.displayName}", person["displayName"]).replace("${person.email}", person["email"]).replace("${snap.role}", snap["role"]).replace("${todayInIndia()}", today_in_india()).replace('${snap.lines.join("\\n")}', "\n".join(snap["lines"]))
     start = '${snap.canWriteSomewhere ? "This person may prepare pantry writes and deletes for the offices they manage." : "This person can look, and cannot prepare a write or a delete. Do not call propose tools."}'
-    return prompt.replace(start, "This person may prepare pantry writes and deletes for the offices they manage." if snap["canWriteSomewhere"] else "This person can look, and cannot prepare a write or a delete. Do not call propose tools.")
+    prompt = prompt.replace(start, "This person may prepare pantry writes and deletes for the offices they manage." if snap["canWriteSomewhere"] else "This person can look, and cannot prepare a write or a delete. Do not call propose tools.")
+    if context_office_name:
+        month = f" for {context_month}" if context_month else ""
+        prompt += f"\nThe screen is open on {context_office_name}{month}. When the person does not name an office, use that one. A named office in the message still wins.\n"
+    return prompt
 
 
-async def run_tool(db, person, name, args):
+def chosen_office(offices, text, earlier="", context_office_id=None):
+    named = named_office(offices, text) or named_office(offices, earlier)
+    if named:
+        return named
+    if len(offices) == 1:
+        return offices[0]
+    if context_office_id:
+        return next((office for office in offices if office["id"] == context_office_id), None)
+    return None
+
+
+def chosen_month(value):
+    value = js_text(value or "")
+    return value if re.fullmatch(r"\d{4}-\d{2}", value) else None
+
+
+async def run_tool(db, person, name, args, context_month=None):
     try:
         if name == "list_offices":
             return {"offices": await inv.list_offices(db, person)}
         if name in ("get_pantry", "list_activity"):
             office = await c.resolve_office(db, person, args.get("office"))
             if name == "get_pantry":
-                return await inv.get_pantry(db, person, office["id"], args.get("month"), series=False)
+                return await inv.get_pantry(db, person, office["id"], args.get("month") or chosen_month(context_month), series=False)
             return {"activity": await inv.list_operations(db, person, office["id"])}
         actions = {"propose_product": "create_product", "propose_purchase": "add_purchase", "propose_count": "add_count"}
         if name in actions:
@@ -188,12 +208,12 @@ def describe_product(office_name, product, month, question):
     return " ".join(lines)
 
 
-async def factual_reply(db, person, text, history=None):
+async def factual_reply(db, person, text, history=None, context_office_id=None, context_month=None):
     if not matches(READ, text):
         return ""
     offices = await inv.list_offices(db, person)
     earlier = "\n".join(item.get("content") or "" for item in history or [])
-    office = named_office(offices, text) or (offices[0] if len(offices) == 1 else named_office(offices, earlier))
+    office = chosen_office(offices, text, earlier, context_office_id)
     products = named_products(text) or named_products(earlier)[-1:]
     if not office:
         return "Which office should I use?"
@@ -202,7 +222,7 @@ async def factual_reply(db, person, text, history=None):
     if not products and stock and not spend:
         return "Which product should I use?"
     try:
-        pantry = await inv.get_pantry(db, person, office["id"], series=False)
+        pantry = await inv.get_pantry(db, person, office["id"], chosen_month(context_month), series=False)
     except Exception as error:
         return error.message if isinstance(error, HttpError) else ""
     if not products and spend:
@@ -247,17 +267,17 @@ def response(reply, proposals=None, saved=False):
     return {"reply": reply, "proposals": proposals or [], "saved": saved}
 
 
-async def delete_reply(db, person, text):
+async def delete_reply(db, person, text, history=None, context_office_id=None):
     if not is_delete_request(text):
         return None
     if not (await c.snapshot_for_chat(db, person))["canWriteSomewhere"]:
         return response("You can look at the pantry. You cannot delete an item.")
     try:
         offices = await inv.list_offices(db, person)
-        office = named_office(offices, text)
-        if not office and len(offices) != 1:
+        earlier = "\n".join(item.get("content") or "" for item in history or [])
+        office = chosen_office(offices, text, earlier, context_office_id)
+        if not office:
             return response("Which office should I use?")
-        office = office or offices[0]
         pantry = await inv.get_pantry(db, person, office["id"], series=False)
         names = [p["name"] for p in pantry["products"] if not p["deletedAt"]]
         hits = [name for name in names if name.lower() in text.lower()]
@@ -356,15 +376,15 @@ async def complete(messages, can_write, on_delta):
             return (payload.get("choices") or [{}])[0].get("message") or {}
 
 
-async def converse(db, person, history, message, *, thread_id=None, on_delta=None, on_replace=None):
+async def converse(db, person, history, message, *, thread_id=None, on_delta=None, on_replace=None, context_office_id=None, context_month=None):
     token = chat_thread.set(thread_id or None)
     try:
-        return await converse_in_thread(db, person, history, message, on_delta=on_delta, on_replace=on_replace)
+        return await converse_in_thread(db, person, history, message, on_delta=on_delta, on_replace=on_replace, context_office_id=context_office_id, context_month=context_month)
     finally:
         chat_thread.reset(token)
 
 
-async def converse_in_thread(db, person, history, message, *, on_delta=None, on_replace=None):
+async def converse_in_thread(db, person, history, message, *, on_delta=None, on_replace=None, context_office_id=None, context_month=None):
     text = js_text(message or "").strip()
     if not text:
         raise HttpError(422, "Write a message first.")
@@ -400,16 +420,19 @@ async def converse_in_thread(db, person, history, message, *, on_delta=None, on_
     blocked = scope_reply(text)
     if blocked:
         return await deliver(response(blocked))
-    deletion = await delete_reply(db, person, text)
+    deletion = await delete_reply(db, person, text, history, context_office_id)
     if deletion:
         return await deliver(deletion)
-    known = await factual_reply(db, person, text, history)
+    known = await factual_reply(db, person, text, history, context_office_id, context_month)
     if known:
         return await deliver(response(known))
     if not api_key():
         return await deliver(response("The assistant is not switched on yet. Recording on the pantry screen still works."))
     can_write = (await c.snapshot_for_chat(db, person))["canWriteSomewhere"]
-    messages = [{"role": "system", "content": await system_prompt(db, person)}, *[{"role": i["role"], "content": js_text(i.get("content") or "")[:2000]} for i in history[-10:]], {"role": "user", "content": text}]
+    screen_name = None
+    if context_office_id:
+        screen_name = next((office["name"] for office in await inv.list_offices(db, person) if office["id"] == context_office_id), None)
+    messages = [{"role": "system", "content": await system_prompt(db, person, screen_name, chosen_month(context_month))}, *[{"role": i["role"], "content": js_text(i.get("content") or "")[:2000]} for i in history[-10:]], {"role": "user", "content": text}]
     proposals, reply, last_pantry = [], "", None
     for _ in range(3):
         assistant = await complete(messages, can_write, emit if on_delta else None)
@@ -418,7 +441,7 @@ async def converse_in_thread(db, person, history, message, *, on_delta=None, on_
         if not calls:
             reply = safe_text(reply_text(assistant), proposals)
             if reply.startswith("I could not read a reply") and last_pantry:
-                reply = await factual_reply(db, person, text, history) or reply
+                reply = await factual_reply(db, person, text, history, context_office_id, context_month) or reply
             break
         for call in calls:
             function = call.get("function") or {}
@@ -426,7 +449,7 @@ async def converse_in_thread(db, person, history, message, *, on_delta=None, on_
                 args = json.loads(function.get("arguments") or "{}")
             except (ValueError, TypeError):
                 args = {}
-            result = await run_tool(db, person, function.get("name"), args)
+            result = await run_tool(db, person, function.get("name"), args, context_month)
             if function.get("name") == "get_pantry" and result and not result.get("error"):
                 last_pantry = result
             if result.get("proposalId"):

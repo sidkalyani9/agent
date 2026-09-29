@@ -161,6 +161,10 @@
   ],
   [
     "POST",
+    "/api/purchases/{}/delete"
+  ],
+  [
+    "POST",
     "/api/purchases/{}/hide"
   ],
   [

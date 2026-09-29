@@ -16,7 +16,7 @@ from .core import HttpError
 from .accounts import person_from_access_token
 
 logger = logging.getLogger(__name__)
-CSP = "; ".join(["default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data:", "font-src 'self'", "connect-src 'self'", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'"])
+CSP = "; ".join(["default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' data: blob:", "font-src 'self'", "connect-src 'self'", "frame-src 'self' blob:", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'"])
 PUBLIC = {("GET", "/api/health"), ("GET", "/api/auth/login"), ("GET", "/api/auth/directory"), ("GET", "/api/auth/callback"), ("POST", "/api/auth/password"), ("GET", "/api/auth/password/setup"), ("POST", "/api/auth/password/setup"), ("POST", "/api/auth/refresh")}
 AUTH_LIMITS = {"/api/auth/login": ("login", 20), "/api/auth/directory": ("login", 20), "/api/auth/callback": ("callback", 30), "/api/auth/password": ("password", 60), "/api/auth/password/setup": ("setup", 10), "/api/auth/refresh": ("refresh", 60)}
 

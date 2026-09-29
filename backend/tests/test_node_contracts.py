@@ -18,7 +18,7 @@ def normalize(value):
     if isinstance(value, str):
         return UUID.sub("<uuid>", value)
     if isinstance(value, dict):
-        return {k: "<password>" if k == "temporaryPassword" else normalize(v) for k, v in value.items()}
+        return {k: "<password>" if k == "temporaryPassword" else normalize(v) for k, v in value.items() if k != "countDates"}
     if isinstance(value, list):
         return [normalize(v) for v in value]
     return value

@@ -57,6 +57,7 @@ export function refreshSession() {
 
 export async function api(path, { method = "GET", body, retried = false, headers: extra = {} } = {}) {
   const headers = authHeaders(method, extra);
+  const passwordCall = path.startsWith("/api/auth/password");
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const response = await fetch(path, {
     method,
@@ -77,7 +78,7 @@ export async function api(path, { method = "GET", body, retried = false, headers
       if (error.status === 401) { setCsrf(""); onUnauthorized(); }
       throw error;
     }
-  } else if (response.status === 401) {
+  } else if (response.status === 401 && !passwordCall) {
     setCsrf("");
     onUnauthorized();
   }
@@ -89,13 +90,14 @@ export async function api(path, { method = "GET", body, retried = false, headers
   return data;
 }
 
-export async function streamChat(body, onEvent, retried = false) {
+export async function streamChat(body, onEvent, retried = false, signal) {
   const headers = authHeaders("POST", { "Content-Type": "application/json", Accept: "text/event-stream" });
   const response = await fetch("/api/chat", {
     method: "POST",
     headers,
     credentials: "same-origin",
     body: JSON.stringify({ ...body, stream: true }),
+    signal,
   });
   const type = response.headers.get("content-type") || "";
   if (!type.includes("text/event-stream")) {
@@ -103,7 +105,7 @@ export async function streamChat(body, onEvent, retried = false) {
     if ((response.status === 401 || (response.status === 403 && data.code === "csrf")) && !retried) {
       try {
         await refreshSession();
-        return streamChat(body, onEvent, true);
+        return streamChat(body, onEvent, true, signal);
       } catch (error) {
         if (error.status === 401) { setCsrf(""); onUnauthorized(); }
         throw error;
@@ -186,6 +188,16 @@ export function monthLabel(month) {
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, mon - 1, 1)));
+}
+
+export function packs(value) {
+  if (value == null || value === "") return "—";
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return String(value);
+  const shown = new Intl.NumberFormat("en-IN", {
+    maximumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+  }).format(amount);
+  return `${shown} ${Math.abs(amount) === 1 ? "pack" : "packs"}`;
 }
 
 export function statusLabel(status) {

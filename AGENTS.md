@@ -80,7 +80,7 @@ Shape and chrome:
 - Focus uses `outline: 2px solid var(--accent)`.
 - The app shell is `100dvh`. Only `.page` scrolls. Do not put a second page scrollbar on `body`.
 - Content width sits near `min(1180px, 100%)`.
-- Left nav: Record, Stock, Charts, Activity. Super Admin also gets Access. The assistant is not a nav item.
+- Left nav: Pantry holds Record, Stock, Charts, and Activity. A Super Admin also gets Super Admin, holding Offices, Access, and Settings. Both groups start open. The assistant is not a nav item. The office switcher sits in the sidebar above the name. The top bar echoes the office and does not add offices.
 - Assistant is the round launcher at the bottom right (`ChatDock`).
 - Active nav item uses the ink fill, same as `.solid`.
 - Money is INR through `rupee()` in `frontend/src/api.js`. Dates display as India dates. Empty money and dates currently render a dash. New client sentences do not use an em dash. Role and status copy uses "No" or a full sentence.
@@ -150,12 +150,13 @@ Calculations live in `backend/pantry/calc.py`. Do not reimplement them in the cl
 - Spend is packs times price per pack on purchases that are not soft-deleted. Amounts are INR.
 - Nothing in pantry stock is hard-deleted. Hide, withdraw, and remove set `deleted_at` and `deleted_by`.
 - `created_by` and `created_at` stay as first written.
-- A failed receipt upload still keeps the purchase. Receipts are PDF, JPEG, or PNG, checked from the file bytes, at most 10MB, stored locally under `PANTRY_DATA_DIR/receipts` (new default `backend/data`, or existing `server/data`) or in private Azure Blob Storage. Immutable versioned object names preserve older receipts for backup recovery. Downloads require office access and are attachments. Type checks are not a malware scanner.
-- Chat stock questions are answered by `factual_reply` in `backend/pantry/chat.py` from live pantry data, before any model call.
+- A failed receipt upload still keeps the purchase. Receipts are PDF, JPEG, or PNG, checked from the file bytes, at most 10MB, stored locally under `PANTRY_DATA_DIR/receipts` (new default `backend/data`, or existing `server/data`) or in private Azure Blob Storage. Immutable versioned object names preserve older receipts for backup recovery. Downloads require office access and are attachments. The screen previews a receipt from a blob URL and still offers Download. Type checks are not a malware scanner.
+- Chat stock questions are answered by `factual_reply` in `backend/pantry/chat.py` from live pantry data, before any model call. The open office and month are a fallback when the message does not name an office. A named office in the message or an earlier turn still wins.
 - The model is TokenRouter at `https://api.tokenrouter.com/v1/chat/completions`, model `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`, key in `OPENROUTER_API_KEY` or `TOKENROUTER_API_KEY`. Do not print the key. Do not set `NODE_TLS_REJECT_UNAUTHORIZED`. This app deletes that variable for its own processes.
 - Replies stream over `POST /api/chat` when `stream` is true. SSE events are `thread`, `delta`, `replace`, `done`, and `error`. The JSON path remains.
 - Follow-ups stay on `threadId`. Errors still return `threadId`.
-- One product, one purchase, or one shelf count can be deleted from chat only after the assistant says the data will be deleted and the person says yes. Accounts and Admin are refused. Hide, restore, wipe, rename, and receipt-only delete stay refused. Weather and other non-pantry topics are refused.
+- One product, one purchase, or one shelf count can be deleted from chat only after the assistant says the data will be deleted and the person says yes. A purchase can also be removed from Purchases and receipts. Accounts and Admin are refused. Hide, restore, wipe, rename, and receipt-only delete stay refused. Weather and other non-pantry topics are refused.
+- The address bar keeps office, month, and view with `history.replaceState`. Refresh restores them. Do not store that screen state in `localStorage`.
 - Propose tools prepare a card. Nothing is saved until the person confirms or says yes.
 - A confirmation belongs to its owner and chat thread, and expires after 30 minutes. A yes in another conversation must not apply it. Recheck live roles inside service operations, including after model calls.
 - Opening the pantry page does not call the model.
@@ -191,9 +192,9 @@ Do not commit secrets, the live database, or a generated invite password. Write 
 - `app.py`, `auth_routes.py`, `routes.py` and `chat_routes.py` expose HTTP and SSE. `http.py` enforces headers, cookies, rate limits and CSRF; `secret.py` handles compatible token encryption. `compat.py` preserves JavaScript numeric/text semantics where required by the existing contract.
 - `config.py` validates production settings; `database.py` provides SQLite/PostgreSQL scopes and nested transactions; `receipts.py` provides immutable local/managed-identity Blob I/O. `python -m pantry.migration` (with `PYTHONPATH=backend`) performs explicit, source-preserving migration to empty PostgreSQL. Never run execution against live data without the user's cutover authorization.
 - Root scripts are convenience/build tooling. `scripts/package_release.py` stages only Python runtime, requirements, startup and frontend assets; production does not need Node. CI tests Python 3.12, PostgreSQL and Node 24, then uploads a release artifact without deploying it.
-- `frontend/src/screens/Dashboard.jsx` is the shell. `SignIn.jsx` is sign-in and set-password. `OfficeBar.jsx` switches offices and adds an office. `AccessPanel.jsx` invites and assigns roles. `RecordPanel.jsx` records. `PantryCharts.jsx` draws charts. `ChatPanel.jsx` is the assistant.
-- `ProductEditor.jsx` edits name/reorder/warning in Stock. `Purchases.jsx` lists monthly purchases and retrieves receipts through authenticated API requests.
-- Record kinds are Purchase, Count, Product, and Settings for a Super Admin. There is no Office kind on that form. Offices are added from the office bar. All offices cannot record. The bar must name one office first.
+- `frontend/src/screens/Dashboard.jsx` is the shell. `SignIn.jsx` is sign-in and set-password. `OfficeBar.jsx` switches offices from the sidebar. `OfficesPanel.jsx` adds, renames, and assigns an Office Manager. There is no office delete. `AccessPanel.jsx` invites and assigns roles. `SettingsPanel.jsx` edits weekend weight and lookback. `RecordPanel.jsx` records. `PantryCharts.jsx` draws charts. `ChatPanel.jsx` is the assistant.
+- `ProductEditor.jsx` edits name/reorder/warning in Stock. `Purchases.jsx` lists monthly purchases, previews and downloads receipts, corrects a purchase, and removes one. Hide and restore stay off screen.
+- Record kinds are Purchase, Count, and Product. Settings is the Super Admin screen. All offices cannot record. Pick one office above the name.
 
 ## Do not
 

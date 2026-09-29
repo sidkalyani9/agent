@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, setCsrf } from "../api.js";
 import { ThemeSwitch } from "../App.jsx";
+import { IconMicrosoft } from "../icons.jsx";
 
 const AUTH_MESSAGES = {
   not_configured: "Microsoft sign-in is not configured on this server yet. You can still sign in with an invited email.",
@@ -34,11 +35,16 @@ function Shell({ theme, children }) {
   );
 }
 
-export function SignIn({ theme, onSuccess, onSetup }) {
+export function SignIn({ theme, onSuccess, onSetup, notice = "" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [message, setMessage] = useState(notice);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (notice) setMessage(notice);
+  }, [notice]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -69,7 +75,7 @@ export function SignIn({ theme, onSuccess, onSetup }) {
     <Shell theme={theme}>
       <h2>Sign in</h2>
       <p className="lede">Use the email a Super Admin invited, or your Intuitive Microsoft account.</p>
-      {message ? <p className="error">{message}</p> : null}
+      {message ? <p className="error" role="alert">{message}</p> : null}
       <form className="sign-form" onSubmit={submit}>
         <label>Email
           <input
@@ -81,40 +87,73 @@ export function SignIn({ theme, onSuccess, onSetup }) {
             required
           />
         </label>
-        <label>Password
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </label>
-        <button className="solid" type="submit" disabled={busy}>Sign in</button>
+        <div className="secret-row">
+          <label htmlFor="sign-password">Password</label>
+          <span className="secret-field">
+            <input
+              id="sign-password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+            <button type="button" className="texty" aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </span>
+        </div>
+        <button className="solid" type="submit" disabled={busy} aria-busy={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       </form>
       <p className="or">or</p>
-      <a className="solid microsoft" href="/api/auth/login">Sign in with Microsoft</a>
+      <a className="solid microsoft" href="/api/auth/login"><IconMicrosoft /> Sign in with Microsoft</a>
+      <p className="lede-small">A Super Admin can send a new invite if you cannot sign in.</p>
     </Shell>
   );
+}
+
+function passwordRules(password) {
+  return [
+    { id: "length", label: "At least 12 characters", ok: password.length >= 12 && password.length <= 128 },
+    { id: "mix", label: "An uppercase letter, a lowercase letter, and a number", ok: /[a-z]/.test(password) && /[A-Z]/.test(password) && /[0-9]/.test(password) },
+    { id: "invite", label: "Different from the invite password", ok: null },
+  ];
 }
 
 export function SetPassword({ theme, email, onSuccess }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
+  const [inviteRejected, setInviteRejected] = useState(false);
   const [busy, setBusy] = useState(false);
-  const matches = password.length > 0 && password === confirm;
+  const started = password.length > 0;
+  const rules = passwordRules(password).map((rule) => {
+    if (rule.id === "invite") return { ...rule, ok: inviteRejected ? false : null };
+    return { ...rule, ok: started ? rule.ok : null };
+  });
 
   async function submit(event) {
     event.preventDefault();
-    setBusy(true);
     setMessage("");
+    setInviteRejected(false);
+    if (password !== confirm) {
+      setMessage("Those passwords do not match.");
+      return;
+    }
+    const unmet = passwordRules(password).filter((rule) => rule.ok === false);
+    if (unmet.length) {
+      setMessage(unmet.map((rule) => rule.label).join(" "));
+      return;
+    }
+    setBusy(true);
     try {
       const data = await api("/api/auth/password/setup", { method: "POST", body: { password, confirm } });
       setCsrf(data.csrfToken);
       onSuccess();
     } catch (err) {
       setMessage(err.message);
+      if (/invite password/i.test(err.message)) setInviteRejected(true);
     } finally {
       setBusy(false);
     }
@@ -124,35 +163,52 @@ export function SetPassword({ theme, email, onSuccess }) {
     <Shell theme={theme}>
       <h2>Choose a password</h2>
       <p className="lede">This invite can be used once. Choose the password you will use next time.</p>
-      {message ? <p className="error">{message}</p> : null}
+      {message ? <p className="error" role="alert">{message}</p> : null}
       <form className="sign-form" onSubmit={submit}>
         <label>Email
           <input type="email" value={email} readOnly autoComplete="username" />
         </label>
-        <label>New password
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </label>
+        <div className="secret-row">
+          <label htmlFor="new-password">New password</label>
+          <span className="secret-field">
+            <input
+              id="new-password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              value={password}
+              aria-invalid={Boolean(message)}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setInviteRejected(false);
+              }}
+              required
+            />
+            <button type="button" className="texty" aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </span>
+        </div>
         <label>Confirm password
           <input
-            type="password"
+            type={showPassword ? "text" : "password"}
             autoComplete="new-password"
             value={confirm}
+            aria-invalid={password !== confirm && confirm.length > 0}
             onChange={(event) => setConfirm(event.target.value)}
             required
           />
         </label>
         <ul className="password-rules">
-          <li>At least 12 characters</li>
-          <li>An uppercase letter, a lowercase letter, and a number</li>
-          <li>Different from the invite password</li>
+          {rules.map((rule) => (
+            <li key={rule.id} className={rule.ok === true ? "rule-met" : rule.ok === false ? "rule-miss" : ""}>
+              {rule.label}
+            </li>
+          ))}
+          <li className={confirm && password !== confirm ? "rule-miss" : password && password === confirm ? "rule-met" : ""}>
+            Confirm password matches
+          </li>
         </ul>
-        <button className="solid" type="submit" disabled={busy || !matches}>Save password</button>
+        <button className="solid" type="submit" disabled={busy} aria-busy={busy}>{busy ? "Saving…" : "Save password"}</button>
       </form>
     </Shell>
   );

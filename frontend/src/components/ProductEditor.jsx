@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { api } from "../api.js";
 
-export function ProductEditor({ product, onSaved }) {
+export function ProductEditor({ product, onSaved, onToast }) {
   const details = useRef(null);
   const [name, setName] = useState(product.name);
   const [reorder, setReorder] = useState(product.reorderLevel);
@@ -16,8 +16,9 @@ export function ProductEditor({ product, onSaved }) {
       await api(`/api/products/${product.productId}`, { method: "PATCH", body: {
         name, reorderLevel: Number(reorder), warningEffectiveDays: Number(warning),
       } });
-      details.current.open = false;
       await onSaved();
+      if (details.current) details.current.open = false;
+      onToast?.("Product saved.");
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
   }

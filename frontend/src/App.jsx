@@ -21,19 +21,24 @@ export function applyTheme(choice) {
 export function App() {
   const [session, setSession] = useState(null);
   const [setupEmail, setSetupEmail] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
   const [ready, setReady] = useState(false);
   const [choice, setChoice] = useState(localStorage.getItem("aim-theme") || "light");
   const [mode, setMode] = useState(resolve(localStorage.getItem("aim-theme") || "light"));
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      setSession((current) => {
+        if (current === true) setAuthNotice("Your session ended. Sign in again.");
+        return false;
+      });
       setSetupEmail("");
-      setSession(false);
     });
     api("/api/me")
       .then((data) => {
         setCsrf(data.csrfToken);
         setSetupEmail("");
+        setAuthNotice("");
         setSession(true);
       })
       .catch(async () => {
@@ -45,6 +50,8 @@ export function App() {
             setSession(false);
             return;
           }
+          const data = await response.json().catch(() => ({}));
+          if (response.status === 401 && data.error && data.error !== "Sign in with the invite password first.") setAuthNotice(data.error);
         } catch {
           /* show the sign-in page */
         }
@@ -78,6 +85,7 @@ export function App() {
         theme={theme}
         email={setupEmail}
         onSuccess={() => {
+          setAuthNotice("");
           setSetupEmail("");
           setSession(true);
         }}
@@ -88,8 +96,15 @@ export function App() {
     return (
       <SignIn
         theme={theme}
-        onSetup={(email) => setSetupEmail(email)}
-        onSuccess={() => setSession(true)}
+        notice={authNotice}
+        onSetup={(email) => {
+          setAuthNotice("");
+          setSetupEmail(email);
+        }}
+        onSuccess={() => {
+          setAuthNotice("");
+          setSession(true);
+        }}
       />
     );
   }

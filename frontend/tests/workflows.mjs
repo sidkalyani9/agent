@@ -7,7 +7,7 @@ export async function extendedWorkflows({ page, browser, app }) {
     await page.locator('.office-pick > button').click();
     await page.getByRole('option', { name, exact: true }).click();
   };
-  await nav('Add office');
+  await nav('Offices');
   const form = page.locator('.office-form');
   await form.getByLabel('Office name', { exact: true }).fill('Browser Annex');
   await form.getByLabel('Search people').fill(app.manager.email);
@@ -32,7 +32,8 @@ export async function extendedWorkflows({ page, browser, app }) {
   await page.getByLabel('Lookback months').fill('4');
   await page.getByLabel('Weekend weight').fill('0.3');
   await nav('Save');
-  await expect(page.getByLabel('Lookback months')).toHaveValue('');
+  await expect(page.getByLabel('Lookback months')).toHaveValue('4');
+  await expect(page.getByLabel('Weekend weight')).toHaveValue('0.3');
   await nav('Stock');
   await expect(page.getByRole('heading', { name: 'Browser oats', exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
@@ -86,7 +87,7 @@ export async function extendedWorkflows({ page, browser, app }) {
   await grant.locator('select').first().selectOption('accounts');
   await grant.locator('select').last().selectOption({ label: 'Ahmedabad' });
   await nav('Save access');
-  await expect(page.getByText('Access saved.', { exact: true })).toBeVisible();
+  await expect(page.locator('main .notice')).toHaveText('Access saved.');
   const invited = await browser.newContext({ viewport: { width: 390, height: 844 } });
   try {
     const user = await invited.newPage();
@@ -97,6 +98,9 @@ export async function extendedWorkflows({ page, browser, app }) {
     await expect(user.getByRole('heading', { name: 'Choose a password' })).toBeVisible();
     await expect(user.getByLabel('Email', { exact: true })).toHaveValue(email);
     await user.getByLabel('New password', { exact: true }).fill('Invited pantry door 42');
+    await user.getByLabel('Confirm password', { exact: true }).fill('Invited pantry door 99');
+    await user.getByRole('button', { name: 'Save password' }).click();
+    await expect(user.getByText('Those passwords do not match.')).toBeVisible();
     await user.getByLabel('Confirm password', { exact: true }).fill('Invited pantry door 42');
     await user.getByRole('button', { name: 'Save password' }).click();
     await expect(user.getByRole('heading', { name: 'Coffee beans', exact: true })).toBeVisible();
@@ -107,14 +111,17 @@ export async function extendedWorkflows({ page, browser, app }) {
     await expect(user.getByText(/It cannot change the pantry/)).toBeVisible();
     const person = page.locator('.access-list li').filter({ hasText: email });
     await person.getByRole('button', { name: /Remove Accounts/ }).click();
+    await person.getByRole('button', { name: 'Remove this role', exact: true }).click();
     await expect(person).toContainText('No role yet');
     await user.reload();
     await expect(user.getByText(/No office/).first()).toBeVisible();
-    await person.getByRole('button', { name: 'Turn off' }).click();
+    await person.getByRole('button', { name: 'Turn off', exact: true }).click();
+    await person.getByRole('button', { name: 'Turn off now', exact: true }).click();
     await expect(person).toContainText('Turned off');
     await user.reload();
     await expect(user.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
-    await person.getByRole('button', { name: 'Turn on' }).click();
+    await person.getByRole('button', { name: 'Turn on', exact: true }).click();
+    await person.getByRole('button', { name: 'Turn on now', exact: true }).click();
     await expect(person.getByRole('button', { name: 'Turn off' })).toBeVisible();
     await user.reload();
     await expect(user.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
